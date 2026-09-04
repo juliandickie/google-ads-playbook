@@ -1,7 +1,7 @@
 """Subcommand registry. Each module exposes register(sub, add_common)."""
-from . import normalise, leakage, misallocate, windows, feedscore, ceiling
+from . import normalise, leakage, misallocate, windows, feedscore, ceiling, bundle
 
-MODULES = [normalise, leakage, misallocate, windows, feedscore, ceiling]
+MODULES = [normalise, leakage, misallocate, windows, feedscore, ceiling, bundle]
 
 def register_all(sub, add_common):
     for m in MODULES:
