@@ -16,17 +16,26 @@ KNOWLEDGE = {  # reference file -> bundle name
 }
 PROMPTS = "10-prompts.md"
 
-def build(references_dir, assets_dir, out_dir):
+def build(references_dir, assets_dir, out_dir, stale=None):
+    """Write the knowledge files, prompts.md, SETUP.md, and the zip into out_dir.
+
+    stale, when given a list, has any *.md file already present in out_dir/knowledge
+    that this run did not write appended to it (sorted by name). Those files are
+    left on disk untouched and excluded from the zip; only files this run wrote
+    are zipped, never a glob of whatever happens to be in the folder.
+    """
     references_dir, assets_dir, out_dir = Path(references_dir), Path(assets_dir), Path(out_dir)
     k = out_dir / "knowledge"
     k.mkdir(parents=True, exist_ok=True)
     written = []
+    written_knowledge = []
     for src, dst in KNOWLEDGE.items():
         s = references_dir / src
         if not s.exists():
             raise io.MissingInput(f"reference missing: {s}")
         shutil.copyfile(s, k / dst)
         written.append(k / dst)
+        written_knowledge.append(k / dst)
     prompts_src = references_dir / PROMPTS
     if not prompts_src.exists():
         raise io.MissingInput(f"reference missing: {prompts_src}")
@@ -35,9 +44,14 @@ def build(references_dir, assets_dir, out_dir):
     if not setup_src.exists():
         raise io.MissingInput(f"reference missing: {setup_src}")
     shutil.copyfile(setup_src, out_dir / "SETUP.md"); written.append(out_dir / "SETUP.md")
+
+    if stale is not None:
+        written_names = {p.name for p in written_knowledge}
+        stale.extend(f for f in sorted(k.glob("*.md")) if f.name not in written_names)
+
     z = out_dir / "google-ads-claude-project.zip"
     with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in sorted(k.glob("*.md")):
+        for f in sorted(written_knowledge, key=lambda p: p.name):
             zf.write(f, "knowledge/" + f.name)
         zf.write(out_dir / "prompts.md", "prompts.md")
         zf.write(out_dir / "SETUP.md", "SETUP.md")
@@ -47,8 +61,12 @@ def build(references_dir, assets_dir, out_dir):
 def cmd_bundle(args):
     root = Path(__file__).resolve().parents[1]
     out = Path(args.out).expanduser()
-    paths = build(root / "references", root / "assets", out)
+    stale = []
+    paths = build(root / "references", root / "assets", out, stale=stale)
     print(f"bundle: {len(paths)} files -> {out}")
+    if stale:
+        names = ", ".join(p.name for p in stale)
+        print(f"bundle: {len(stale)} stale file(s) in {out / 'knowledge'} not written by this run and not in the zip: {names}")
     return 0
 
 def register(sub, add_common):

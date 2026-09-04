@@ -1,6 +1,6 @@
-import tempfile, unittest, zipfile
+import shutil, tempfile, unittest, zipfile
 from pathlib import Path
-from gads_playbook import bundle
+from gads_playbook import bundle, io
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,6 +30,33 @@ class BundleTests(unittest.TestCase):
             bundle.build(ROOT / "references", ROOT / "assets", Path(d))
             for f in sorted((Path(d) / "knowledge").glob("*.md")):
                 self.assertEqual(f.read_text(), (pub / f.name).read_text(), f.name)
+    def test_stale_knowledge_file_is_not_zipped_but_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "bundle"
+            (out / "knowledge").mkdir(parents=True)
+            stale_file = out / "knowledge" / "99-stale-leftover.md"
+            stale_file.write_text("old content that no longer has a source reference")
+            stale = []
+            bundle.build(ROOT / "references", ROOT / "assets", out, stale=stale)
+            with zipfile.ZipFile(out / "google-ads-claude-project.zip") as z:
+                members = z.namelist()
+            self.assertNotIn("knowledge/99-stale-leftover.md", members)
+            self.assertTrue(stale_file.exists())
+            self.assertEqual(stale_file.read_text(), "old content that no longer has a source reference")
+            self.assertIn(stale_file, stale)
+    def test_missing_reference_raises_missing_input_naming_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            refs = Path(d) / "references"
+            refs.mkdir()
+            for name in bundle.KNOWLEDGE:
+                if name == "06-google-audit-checklist.md":
+                    continue
+                shutil.copyfile(ROOT / "references" / name, refs / name)
+            shutil.copyfile(ROOT / "references" / bundle.PROMPTS, refs / bundle.PROMPTS)
+            out = Path(d) / "bundle"
+            with self.assertRaises(io.MissingInput) as ctx:
+                bundle.build(refs, ROOT / "assets", out)
+            self.assertIn("06-google-audit-checklist.md", str(ctx.exception))
 
 if __name__ == "__main__":
     unittest.main()
