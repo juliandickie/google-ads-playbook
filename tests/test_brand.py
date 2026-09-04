@@ -61,6 +61,13 @@ class ClassifyTests(unittest.TestCase):
         rows2 = [{"campaign.name": "Search 2", "ad_group_criterion.keyword.text": "magnesium", "metrics.clicks": "50"},
                  {"campaign.name": "Search 2", "ad_group_criterion.keyword.text": "nordvital", "metrics.clicks": "10"}]
         self.assertEqual(self.b.classify_campaign("Search 2", keyword_rows=rows2), "nonbrand")
+    def test_non_numeric_clicks_do_not_raise(self):
+        # T2: a UI export can show '--' for a suppressed clicks cell; it must weight as 0 (falling
+        # back to 1.0, same as a real zero) instead of raising ValueError out of float().
+        rows = [{"campaign.name": "Search 1", "ad_group_criterion.keyword.text": "nordvital", "metrics.clicks": "--"},
+                {"campaign.name": "Search 1", "ad_group_criterion.keyword.text": "magnesium", "metrics.clicks": "5"}]
+        result = self.b.classify_campaign("Search 1", keyword_rows=rows)
+        self.assertEqual(result, "nonbrand")
     def test_pmax_by_tag(self):
         self.assertEqual(self.b.classify_campaign("PMax | Capture | Brand allowed", "PERFORMANCE_MAX"), "pmax-capture")
         self.assertEqual(self.b.classify_campaign("PMax | Scaling | Brand excluded", "PERFORMANCE_MAX"), "pmax-scaling")

@@ -31,7 +31,13 @@ def _window(rows, end, length):
 def _verdict(wins, target, breakeven, tolerance, min_conversions):
     reasons = []
     ok = True
+    zero_spend = []
     for L, w in wins.items():
+        if w["cur"]["cost"] == 0:
+            ok = False
+            zero_spend.append(L)
+            reasons.append(f"no spend in the {L}-day window")
+            continue
         roas = w["cur"]["roas"]
         if roas is None or roas < target:
             ok = False
@@ -41,7 +47,7 @@ def _verdict(wins, target, breakeven, tolerance, min_conversions):
             reasons.append(f"{L}-day ROAS down {render.pct(-w['delta_roas'])} versus the prior {L} days")
     if ok and len(wins) == len(LENGTHS):
         return "scale", ["ROAS at or above target in all three windows and no window down more than " + render.pct(tolerance)]
-    if breakeven is not None and len(wins) == len(LENGTHS):
+    if breakeven is not None and len(wins) == len(LENGTHS) and not zero_spend:
         below = all((w["cur"]["roas"] or 0) < breakeven for w in wins.values())
         conv30 = wins[30]["cur"]["conversions"]
         if below and conv30 >= min_conversions:
@@ -66,6 +72,8 @@ def compute(campaigns, target_roas, breakeven_roas=None, end_date=None, toleranc
     out = []
     for name, rows in by.items():
         camp_dates = sorted({r["segments.date"] for r in rows if r.get("segments.date")})
+        if not camp_dates:
+            raise io.MissingInput(f"campaign '{name}' has no segments.date values in campaigns.csv; windows needs daily rows for every campaign.")
         camp_first = date.fromisoformat(camp_dates[0])
         camp_available = [L for L in LENGTHS if (end - camp_first).days + 1 >= 2 * L]
         camp_unavailable = [L for L in LENGTHS if L not in camp_available]

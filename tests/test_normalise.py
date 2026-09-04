@@ -20,6 +20,8 @@ class DetectTests(unittest.TestCase):
         with self.assertRaises(normalise.UnknownReport) as cm:
             normalise.detect_report(["Placement report (x)", "Placement,Impr."])
         self.assertIn("campaigns", str(cm.exception))
+        # R35 (T3): only the five report types with a MAPPINGS entry are named; ad_groups has none.
+        self.assertNotIn("ad_groups", str(cm.exception))
 
 class FileTests(unittest.TestCase):
     def test_campaign_report(self):
@@ -101,6 +103,24 @@ class FileTests(unittest.TestCase):
         with self.assertRaises(io.MissingInput) as cm:
             normalise.normalise_file(Path("/nonexistent/x.csv"))
         self.assertIn("x.csv", str(cm.exception))
+    def test_tab_separated_export_normalises_correctly(self):
+        # R35 (T3): io.sniff_delimiter is used for the header-line search too, so a genuinely
+        # tab-separated export (with a comma inside the title line) still finds its header.
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "tab_campaign_report.csv"
+            content = (
+                "Campaign report (Jul 1, 2026 - Sep 1, 2026)\n"
+                "Day\tCampaign\tCampaign state\tCampaign type\tBid strategy type\tBudget\tImpr.\tClicks\tCost\tConversions\tConv. value\tSearch impr. share\tSearch lost IS (budget)\tSearch lost IS (rank)\n"
+                "2026-08-30\tSearch | Brand | BOF | AU\tEnabled\tSearch\tTarget impression share\t20.00\t1200\t300\t95.40\t30.00\t2700.00\t92.11%\t10.00%\t--\n"
+                "2026-08-31\tSearch | Brand | BOF | AU\tEnabled\tSearch\tTarget impression share\t20.00\t1150\t290\t91.00\t28.00\t2520.00\t93.00%\t10.00%\t--\n"
+            )
+            p.write_text(content)
+            t, rows = normalise.normalise_file(p)
+            self.assertEqual(t, "campaigns")
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(rows[0]["campaign.name"], "Search | Brand | BOF | AU")
+            self.assertEqual(rows[0]["metrics.cost_micros"], "95400000")
+            self.assertEqual(rows[1]["metrics.cost_micros"], "91000000")
 
 class MixedFolderTests(unittest.TestCase):
     def test_bad_file_in_batch_leaves_workspace_untouched(self):

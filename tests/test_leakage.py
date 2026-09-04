@@ -1,4 +1,5 @@
-import json, tempfile, unittest
+import contextlib, json, tempfile, unittest
+from io import StringIO
 from pathlib import Path
 from gads_playbook import leakage, io
 from gads_playbook.brand import Brand
@@ -44,7 +45,10 @@ class LeakageTests(unittest.TestCase):
             import shutil
             ws = Path(d) / "ws"; shutil.copytree(WS, ws)
             from gads_playbook.cli import main
-            self.assertEqual(main(["leakage", "--workspace", str(ws), "--run-date", "2026-09-04"]), 0)
+            buf = StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = main(["leakage", "--workspace", str(ws), "--run-date", "2026-09-04"])
+            self.assertEqual(code, 0)
             out = ws / "runs" / "2026-09-04"
             self.assertTrue((out / "leakage.md").exists())
             j = json.loads((out / "leakage.json").read_text())
@@ -87,6 +91,85 @@ class WindowTests(unittest.TestCase):
         r = leakage.compute(self.c, self.t, self.b, keywords=None)
         by = {x["campaign"]: x for x in r["per_campaign"]}
         self.assertEqual(by["Search | Brand | BOF | AU"]["kind"], "brand")
+
+class OtherChannelTests(unittest.TestCase):
+    # R32: a non-search, non-shopping, non-PMax campaign (Display, Video, Demand Gen, Multi-channel) is not
+    # split by search terms or folded into the non-brand group; it gets its own kind and its own section.
+    def setUp(self):
+        self.c = io.read_csv(WS / "exports" / "campaigns.csv")
+        self.t = io.read_csv(WS / "exports" / "search_terms.csv")
+        self.k = io.read_csv(WS / "exports" / "keywords.csv")
+        self.b = Brand(["NordVital"])
+        self.display_row = {"segments.date": "2026-08-30", "campaign.id": "", "campaign.name": "Display | Remarketing",
+                             "campaign.status": "ENABLED", "campaign.advertising_channel_type": "DISPLAY",
+                             "campaign.bidding_strategy_type": "MAXIMIZE_CONVERSIONS", "campaign_budget.amount_micros": "10000000",
+                             "metrics.impressions": "50000", "metrics.clicks": "200", "metrics.cost_micros": "5000000",
+                             "metrics.conversions": "2.0", "metrics.conversions_value": "300.0",
+                             "metrics.search_impression_share": "", "metrics.search_budget_lost_impression_share": "",
+                             "metrics.search_rank_lost_impression_share": ""}
+    def test_display_campaign_is_other_channel_and_excluded_from_nonbrand_roas(self):
+        r_before = leakage.compute(self.c, self.t, self.b, self.k)
+        r_after = leakage.compute(self.c + [self.display_row], self.t, self.b, self.k)
+        self.assertAlmostEqual(r_before["account"]["reported_nonbrand_roas"], r_after["account"]["reported_nonbrand_roas"])
+        by = {x["campaign"]: x for x in r_after["per_campaign"]}
+        self.assertEqual(by["Display | Remarketing"]["kind"], "other-channel")
+        self.assertAlmostEqual(r_after["account"]["total_value"] - r_before["account"]["total_value"], 300.0)
+        privacy_assumptions = [s for s in r_after["assumptions"] if "privacy threshold" in s]
+        for s in privacy_assumptions:
+            self.assertNotIn("Display | Remarketing", s)
+    def test_other_channel_section_and_assumption(self):
+        r = leakage.compute(self.c + [self.display_row], self.t, self.b, self.k)
+        md = leakage.render_md(r, "AUD")
+        self.assertIn("## Other channels", md)
+        self.assertIn("Display | Remarketing", md)
+        self.assertTrue(any("Non-search campaigns" in s and "Display | Remarketing" in s for s in r["assumptions"]))
+
+class TermsOnlyTests(unittest.TestCase):
+    # R33: a campaign present in search_terms.csv but absent from campaigns.csv is a phantom row, not a
+    # real zero-cost campaign; it must not inflate the account totals or the non-brand grouping.
+    def setUp(self):
+        self.c = io.read_csv(WS / "exports" / "campaigns.csv")
+        self.t = io.read_csv(WS / "exports" / "search_terms.csv")
+        self.k = io.read_csv(WS / "exports" / "keywords.csv")
+        self.b = Brand(["NordVital"])
+        self.ghost_row = {"campaign.id": "", "campaign.name": "Ghost", "ad_group.id": "", "ad_group.name": "",
+                           "search_term_view.search_term": "ghost term", "segments.search_term_match_type": "BROAD",
+                           "metrics.impressions": "100", "metrics.clicks": "10", "metrics.cost_micros": "900000",
+                           "metrics.conversions": "1.0", "metrics.conversions_value": "50.0"}
+    def test_ghost_campaign_is_terms_only_and_excluded_from_blended_roas(self):
+        r_before = leakage.compute(self.c, self.t, self.b, self.k)
+        r_after = leakage.compute(self.c, self.t + [self.ghost_row], self.b, self.k)
+        self.assertAlmostEqual(r_before["account"]["blended_roas"], r_after["account"]["blended_roas"])
+        by = {x["campaign"]: x for x in r_after["per_campaign"]}
+        self.assertEqual(by["Ghost"]["kind"], "terms-only")
+        self.assertEqual(by["Ghost"]["cost"], 900_000)
+        self.assertAlmostEqual(by["Ghost"]["value"], 50.0)
+        self.assertTrue(any("Ghost" in s and "not in campaigns.csv" in s for s in r_after["assumptions"]))
+
+class WindowMismatchOtherCostTests(unittest.TestCase):
+    # R34: when the campaign and search-terms windows differ, other_cost is unknowable (not zero), so it
+    # must render as an explicit "n/a" rather than a number that looks precise but mixes two windows.
+    def setUp(self):
+        self.c = io.read_csv(WS / "exports" / "campaigns.csv")
+        self.t = io.read_csv(WS / "exports" / "search_terms.csv")
+        self.k = io.read_csv(WS / "exports" / "keywords.csv")
+        self.b = Brand(["NordVital"])
+        self.differing_windows = {"window_start": "2026-06-03", "window_end": "2026-08-31", "search_terms_window_start": "2026-03-04"}
+        self.matching_windows = {"window_start": "2026-06-03", "window_end": "2026-08-31", "search_terms_window_start": "2026-06-03"}
+    def test_other_cost_is_none_and_renders_na_when_windows_differ(self):
+        r = leakage.compute(self.c, self.t, self.b, self.k, windows=self.differing_windows)
+        by = {x["campaign"]: x for x in r["per_campaign"]}
+        nb = by["Search | NonBrand | BOF | Magnesium"]
+        self.assertIsNone(nb["other_cost"])
+        md = leakage.render_md(r, "AUD")
+        self.assertIn("n/a (windows differ)", md)
+        self.assertFalse(any("privacy threshold" in s for s in r["assumptions"]))
+    def test_other_cost_computed_when_windows_match(self):
+        r = leakage.compute(self.c, self.t, self.b, self.k, windows=self.matching_windows)
+        by = {x["campaign"]: x for x in r["per_campaign"]}
+        nb = by["Search | NonBrand | BOF | Magnesium"]
+        self.assertIsNotNone(nb["other_cost"])
+        self.assertEqual(nb["other_cost"], max(nb["cost"] - nb["branded_cost"] - nb["nonbranded_cost"], 0))
 
 if __name__ == "__main__":
     unittest.main()

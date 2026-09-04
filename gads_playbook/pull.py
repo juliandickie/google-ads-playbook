@@ -1,13 +1,30 @@
 """Pull the canonical exports from the Google Ads API (spec section 6.8). Read-only, search_stream only, no writes to any account."""
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from . import io, schema, gaql
 from .auth import CONFIG_DIR
 
 CAUSES = ("the developer token's access level (test-account-only tokens cannot read production accounts, request Basic or "
           "Explorer access in the API Center), and the login customer id (the MCC must manage the target account, and "
           "login_customer_id in google-ads.yaml must be the MCC)")
+
+IMPRESSION_SHARE_FIELDS = ("metrics.search_impression_share", "metrics.search_budget_lost_impression_share",
+                           "metrics.search_rank_lost_impression_share")
+SEARCH_LIKE_CHANNELS = ("SEARCH", "SHOPPING")
+
+def _window_end(tz_name):
+    """Yesterday in the account's own time zone (ruling R37), so a pull run just after midnight in a
+    zone west of the runner does not window in a day that has not finished there yet. An empty or
+    unknown zone falls back to the local date and returns a note naming the fallback."""
+    try:
+        if not tz_name:
+            raise ZoneInfoNotFoundError(tz_name)
+        tz = ZoneInfo(tz_name)
+        return datetime.now(tz).date() - timedelta(days=1), None
+    except ZoneInfoNotFoundError:
+        return date.today() - timedelta(days=1), "account time zone unknown; window ended on the local date"
 
 def make_client():
     try:
@@ -21,7 +38,10 @@ def make_client():
     yaml = CONFIG_DIR / "google-ads.yaml"
     if not yaml.exists():
         raise io.MissingInput(f"{yaml} not found. Run gads auth first.")
-    return GoogleAdsClient.load_from_storage(str(yaml))
+    try:
+        return GoogleAdsClient.load_from_storage(str(yaml))
+    except Exception as e:
+        raise io.MissingInput(f"failed to load {yaml}: {e}") from e
 
 def _resource_of(query):
     return query.split("FROM")[1].split()[0]
@@ -45,23 +65,30 @@ def _rows(client, customer_id, query, fields):
 def run(customer_id, login_customer_id, days, search_terms_days, ws, client=None):
     """Two-phase (ruling R25). Phase one reads the customer row and every report in schema.REPORT_TYPES order, holding
     all rows in memory; any API failure raises io.MissingInput and nothing is written. Phase two writes the six CSVs
-    and then updates gads.json."""
+    and then updates gads.json. The window end is yesterday in the account's own time zone (ruling R37)."""
     ws = Path(ws)
     client = client or make_client()
-    end = date.today() - timedelta(days=1)
-    start = end - timedelta(days=days - 1)
-    st_start = end - timedelta(days=search_terms_days - 1)
 
     cust = _rows(client, customer_id, gaql.render("customer", "", ""),
                  ["customer.currency_code", "customer.time_zone", "customer.descriptive_name"])
     if not cust:
         raise io.MissingInput(f"customer {customer_id} returned no customer row. Check the id and that {login_customer_id} manages it.")
 
+    end, window_note = _window_end(cust[0].get("customer.time_zone", ""))
+    start = end - timedelta(days=days - 1)
+    st_start = end - timedelta(days=search_terms_days - 1)
+
     results = {}
     for name in schema.REPORT_TYPES:
         s = st_start if name == "search_terms" else start
         query = gaql.render(name, s.isoformat(), end.isoformat())
-        results[name] = _rows(client, customer_id, query, schema.COLUMNS[name])
+        rows = _rows(client, customer_id, query, schema.COLUMNS[name])
+        if name == "campaigns":
+            for row in rows:
+                if row.get("campaign.advertising_channel_type") not in SEARCH_LIKE_CHANNELS:
+                    for f in IMPRESSION_SHARE_FIELDS:
+                        row[f] = ""
+        results[name] = rows
 
     counts = {}
     for name in schema.REPORT_TYPES:
@@ -77,12 +104,16 @@ def run(customer_id, login_customer_id, days, search_terms_days, ws, client=None
                  "currency": cust[0]["customer.currency_code"], "timezone": cust[0]["customer.time_zone"],
                  "window_start": start.isoformat(), "window_end": end.isoformat(), "search_terms_window_start": st_start.isoformat(),
                  "pulled_at": date.today().isoformat()})
+    if window_note:
+        data["window_note"] = window_note
+    else:
+        data.pop("window_note", None)
     io.save_workspace(ws, data)
     return counts
 
 def cmd_pull(args):
     from .cli import workspace_from
-    ws = workspace_from(args) if (args.workspace or os.environ.get("GADS_WORKSPACE")) else Path.home() / "gads" / args.customer
+    ws = workspace_from(args) if (args.workspace or os.environ.get("GADS_WORKSPACE")) else Path.home() / "gads" / args.customer.replace("-", "")
     counts = run(args.customer.replace("-", ""), args.login_customer.replace("-", ""), args.days, args.search_terms_days, ws)
     print("pull: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + f" -> {ws / 'exports'}")
     return 0

@@ -28,6 +28,11 @@ class AccountsTests(unittest.TestCase):
         self.assertEqual(rows[0]["name"], "Client A")
         self.assertEqual(rows[0]["manager"], "")
         self.assertEqual(rows[0]["status"], "ENABLED")
+    def test_query_selects_level_but_does_not_filter_on_it(self):
+        # R39: the level <= 1 filter hid sub-manager accounts and their clients; level is still
+        # selected (and printed) so the operator can see the depth, but nothing is excluded by it.
+        self.assertIn("customer_client.level", accounts.QUERY)
+        self.assertNotIn("WHERE", accounts.QUERY)
 
 class RaisingAccountsService:
     def search_stream(self, customer_id, query):

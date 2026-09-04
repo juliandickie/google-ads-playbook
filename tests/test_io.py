@@ -30,6 +30,15 @@ class CsvTests(unittest.TestCase):
             q = Path(d) / "kp.csv"
             q.write_text("Keyword\tAvg. monthly searches\nmagnesium\t1,000\n", encoding="utf-16")
             self.assertEqual(io.read_csv(q), [{"Keyword": "magnesium", "Avg. monthly searches": "1,000"}])
+    def test_quoted_multiline_field_round_trips(self):
+        # An embedded newline inside a quoted field must survive read_csv (splitlines(keepends=True)
+        # so csv sees the original line structure, rather than losing the newline to a naive split).
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "desc.csv"
+            io.write_csv(p, [{"id": "1", "description": "Line one\nLine two"}], ["id", "description"])
+            rows = io.read_csv(p)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["description"], "Line one\nLine two")
     def test_read_csv_lines_sniffs_delimiter_from_in_memory_lines(self):
         lines = ["Keyword\tAvg. monthly searches", "magnesium\t1,000"]
         self.assertEqual(io.read_csv_lines(lines), [{"Keyword": "magnesium", "Avg. monthly searches": "1,000"}])

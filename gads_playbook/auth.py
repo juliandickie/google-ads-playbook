@@ -52,7 +52,7 @@ def cmd_auth(args):
         import getpass
         token = getpass.getpass("Google Ads developer token (from the manager account API Center): ").strip()
     cid, csec, rtok = run_oauth(client_json)
-    paths = write_credential_files(CONFIG_DIR, cid, csec, rtok, token, args.login_customer_id)
+    paths = write_credential_files(CONFIG_DIR, cid, csec, rtok, token, args.login_customer_id.replace("-", ""))
     print(f"auth: wrote {paths['adc']} and {paths['yaml']} (mode 600). Set adc_path in the plugin config to {paths['adc']}.")
     return 0
 

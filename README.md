@@ -40,6 +40,8 @@ No API access? Export from the Google Ads UI and run `gads normalise`. Everythin
 
 `bin/gads` with subcommands `validate`, `normalise`, `leakage`, `misallocate`, `windows`, `feedscore`, `ceiling`, `bundle`, `auth`, `accounts`, `pull`. Stdlib Python except the last three, which run under `uv` with the Google Ads client. Every threshold is a flag; the defaults are the playbook's practitioner numbers, meant to be replaced by the account's own history after 30 days.
 
+`gads pull` defaults to 90 days of campaigns and 180 days of search terms; pass `--search-terms-days` equal to `--days` before running leakage or misallocate for a window-consistent read (both calculators say which windows they used).
+
 ## Decisions baked in
 
 Two PMax campaigns (capture and scaling). Non-branded search in Phase 2. Feed descriptions toward 5,000 characters. Scale 20-30 percent every 48-72 hours only when the 7, 14, and 30-day windows agree. They live in `references/02-google-ads-architecture.md`; change them there.

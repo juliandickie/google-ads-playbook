@@ -8,12 +8,12 @@ description: Ongoing management - the daily audit, the weekly scaling plan behin
 Load the `gads` skill first. Refresh the data, then run the gate:
 
 ```
-${CLAUDE_PLUGIN_ROOT}/bin/gads pull --customer <id> --login-customer <mcc> --days 60 --search-terms-days 60 --workspace <ws>
+${CLAUDE_PLUGIN_ROOT}/bin/gads pull --customer <id> --login-customer <mcc> --days 70 --search-terms-days 70 --workspace <ws>
 ${CLAUDE_PLUGIN_ROOT}/bin/gads windows --workspace <ws>
 ${CLAUDE_PLUGIN_ROOT}/bin/gads leakage --workspace <ws>
 ```
 
-(60 days for both so the 30-versus-prior-30 window exists and the leakage read uses one window. Use `normalise` on fresh UI exports when the API is unavailable.)
+(70 days for both so the 30-versus-prior-30 window survives a quiet first day and the leakage read uses one window. Use `normalise` on fresh UI exports when the API is unavailable.)
 
 ## 4.1 Daily audit
 

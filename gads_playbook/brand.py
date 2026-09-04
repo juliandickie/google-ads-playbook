@@ -6,6 +6,14 @@ _PUNCT = re.compile(r"[^a-z0-9 ]+")
 _WS = re.compile(r"\s+")
 NONBRAND_MARKERS = ("non-brand", "nonbrand", "non brand", "non_brand", "generic")
 
+def _clicks(v):
+    """Non-numeric or blank clicks counts as 0 (T2): a UI export can show '--' for a suppressed
+    low-volume row, which must not raise ValueError out of the keyword-composition weighting below."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
 def normalise_text(s):
     s = _PUNCT.sub(" ", str(s or "").lower().replace("'", ""))
     return _WS.sub(" ", s).strip()
@@ -50,7 +58,7 @@ class Brand:
             if rows:
                 total = branded = 0.0
                 for r in rows:
-                    w = float(r.get("metrics.clicks") or 0) or 1.0
+                    w = _clicks(r.get("metrics.clicks")) or 1.0
                     total += w
                     if self.is_branded(r.get("ad_group_criterion.keyword.text", "")):
                         branded += w

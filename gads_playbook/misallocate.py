@@ -12,13 +12,16 @@ def compute(terms, campaigns, min_conversions=5, win_cvr=0.20, win_share=0.02, l
     search_terms_start = windows.get("search_terms_window_start") or ""
     campaign_window = f"{campaign_start} to {campaign_end}" if campaign_start and campaign_end else ""
     search_terms_window = f"{search_terms_start} to {campaign_end}" if search_terms_start and campaign_end else ""
+    windows_differ = bool(search_terms_start) and search_terms_start != campaign_start
+    share_basis = "term_cost" if windows_differ else "campaign_cost"
 
     camp_term_cost = defaultdict(int)
     for r in terms:
         camp_term_cost[r["campaign.name"]] += int(_num(r.get("metrics.cost_micros")))
-    camp_reported_cost = defaultdict(int)
+    camp_reported_cost = {}
     for r in campaigns:
-        camp_reported_cost[r["campaign.name"]] += int(_num(r.get("metrics.cost_micros")))
+        name = r["campaign.name"]
+        camp_reported_cost[name] = camp_reported_cost.get(name, 0) + int(_num(r.get("metrics.cost_micros")))
     winners, losers = [], []
     for r in terms:
         conv = _num(r.get("metrics.conversions"))
@@ -26,12 +29,16 @@ def compute(terms, campaigns, min_conversions=5, win_cvr=0.20, win_share=0.02, l
             continue
         clicks = _num(r.get("metrics.clicks"))
         cost = int(_num(r.get("metrics.cost_micros")))
-        ccost = camp_term_cost[r["campaign.name"]] or 1
+        name = r["campaign.name"]
+        if share_basis == "campaign_cost" and name in camp_reported_cost:
+            ccost = camp_reported_cost[name] or 1
+        else:
+            ccost = camp_term_cost[name] or 1
         cvr = conv / clicks if clicks else 0.0
         share = cost / ccost
-        row = {"term": r["search_term_view.search_term"], "campaign": r["campaign.name"], "ad_group": r.get("ad_group.name", ""),
+        row = {"term": r["search_term_view.search_term"], "campaign": name, "ad_group": r.get("ad_group.name", ""),
                "match_type": r.get("segments.search_term_match_type", ""), "clicks": int(clicks), "conversions": conv, "cvr": cvr,
-               "cost": cost, "campaign_cost": ccost, "share": share, "value": _num(r.get("metrics.conversions_value"))}
+               "cost": cost, "campaign_term_cost": ccost, "share": share, "value": _num(r.get("metrics.conversions_value"))}
         if cvr > win_cvr and share < win_share:
             winners.append(row)
         elif cvr < lose_cvr and share > lose_share:
@@ -49,6 +56,7 @@ def compute(terms, campaigns, min_conversions=5, win_cvr=0.20, win_share=0.02, l
     return {"winners": winners, "losers": losers, "reallocation": reallocation,
             "thresholds": {"min_conversions": min_conversions, "win_cvr": win_cvr, "win_share": win_share, "lose_cvr": lose_cvr, "lose_share": lose_share},
             "coverage": coverage,
+            "share_basis": share_basis,
             "windows": {"campaign_window": campaign_window, "search_terms_window": search_terms_window}}
 
 def _rows(items, currency):
@@ -60,11 +68,15 @@ def render_md(result, currency=""):
     w = result.get("windows", {})
     cols = ["term", "campaign", "clicks", "conv", "cvr", "cost", "share", "value"]
     heads = ["Search term", "Campaign", "Clicks", "Conv", "CVR", "Cost", "Share of campaign", "Conv value"]
+    if result.get("share_basis") == "campaign_cost":
+        denom_sentence = "Share is the term's cost over its campaign's reported cost (campaigns.csv) for this run."
+    else:
+        denom_sentence = ("Share is the term's cost over its campaign's summed search-term cost in the search-terms window. "
+                          "Terms under Google's privacy threshold are not in the report, so the denominator is a floor.")
     lines = ["# Spend misallocation audit", "",
              (f"Terms with at least {t['min_conversions']} conversions. Winners: CVR above {render.pct(t['win_cvr'])} on under {render.pct(t['win_share'])} share. "
               f"Losers: CVR under {render.pct(t['lose_cvr'])} on over {render.pct(t['lose_share'])} share. "
-              "Share is the term's cost over its campaign's summed search-term cost in the search-terms window. "
-              "Terms under Google's privacy threshold are not in the report, so the denominator is a floor. "
+              f"{denom_sentence} "
               "Winners are ranked by conversions, losers by cost."),
              "", "## Underfunded winners", ""]
     lines.append(render.table(_rows(result["winners"], currency), cols, heads) if result["winners"] else "None found.")

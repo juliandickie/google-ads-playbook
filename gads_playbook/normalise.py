@@ -114,7 +114,7 @@ def detect_report(first_lines):
         for hint, t in HEADER_HINTS:
             if hint in cells:
                 return t
-    raise UnknownReport("unrecognised export. Recognised types: " + ", ".join(schema.REPORT_TYPES) +
+    raise UnknownReport("unrecognised export. Recognised types: " + ", ".join(MAPPINGS) +
                         ". Export from the Campaigns, Search terms, Search keywords, Products, or Conversions pages.")
 
 def _channel(v):
@@ -203,12 +203,13 @@ def normalise_file(path):
     start = 0
     labels = {lab for cols in MAPPINGS[report_type].values() for lab in cols[0]}
     for i, line in enumerate(lines[:5]):
-        cells = {c.strip().strip('"') for c in line.split(",")}
+        delim = io.sniff_delimiter(line)
+        cells = {c.strip().strip('"') for c in next(csv.reader([line], delimiter=delim), [])}
         if cells & labels:
             start = i
             break
     header_line = lines[start] if start < len(lines) else ""
-    delim = "\t" if header_line.count("\t") > header_line.count(",") else ","
+    delim = io.sniff_delimiter(header_line)
     header = next(csv.reader([header_line], delimiter=delim), [])
     rows = io.read_csv_lines(lines[start:])
     return report_type, normalise_rows(report_type, rows, header=header)

@@ -17,27 +17,35 @@ def _decode(path):
     except UnicodeDecodeError:
         return raw.decode("latin-1")
 
+def sniff_delimiter(header_line):
+    """Tab if the line has more tabs than commas, else comma. Shared by read_csv_lines, read_header, and
+    normalise's own header-line search, so the three agree on one sniffing rule."""
+    return "\t" if header_line.count("\t") > header_line.count(",") else ","
+
 def read_csv_lines(lines):
-    """Parse already-split CSV/TSV lines into a list of dicts. Delimiter is sniffed from the first line (tab if it has more tabs than commas, else comma)."""
+    """Parse CSV/TSV lines into a list of dicts. Lines may or may not carry their trailing newline (both
+    forms are accepted). Delimiter is sniffed from the first line."""
     lines = list(lines)
     if not lines:
         return []
-    delim = "\t" if lines[0].count("\t") > lines[0].count(",") else ","
+    delim = sniff_delimiter(lines[0])
     return [dict(r) for r in csv.DictReader(lines, delimiter=delim)]
 
 def read_csv(path):
-    """Read a CSV or TSV (utf-8, utf-8-sig, or utf-16) into a list of dicts. Delimiter is sniffed from the header line."""
+    """Read a CSV or TSV (utf-8, utf-8-sig, or utf-16) into a list of dicts. Delimiter is sniffed from the
+    header line. Lines keep their terminators (splitlines(keepends=True)) so csv sees the original line
+    structure and a quoted field spanning multiple physical lines keeps its embedded newline."""
     text = _decode(path)
-    lines = text.splitlines()
+    lines = text.splitlines(keepends=True)
     return read_csv_lines(lines)
 
 def read_header(path):
     """Return the header row of a CSV/TSV as a list of column names, or None if the file has no header line (empty or whitespace only)."""
     text = _decode(path)
-    lines = text.splitlines()
+    lines = text.splitlines(keepends=True)
     if not lines or not lines[0].strip():
         return None
-    delim = "\t" if lines[0].count("\t") > lines[0].count(",") else ","
+    delim = sniff_delimiter(lines[0])
     return next(csv.reader([lines[0]], delimiter=delim))
 
 def write_csv(path, rows, columns):

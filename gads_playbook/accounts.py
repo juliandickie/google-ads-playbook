@@ -3,7 +3,7 @@ from . import render
 from .pull import make_client, api_error
 
 QUERY = ("SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.level, "
-         "customer_client.currency_code, customer_client.status FROM customer_client WHERE customer_client.level <= 1")
+         "customer_client.currency_code, customer_client.status FROM customer_client")
 
 def run(login_customer_id, client=None):
     client = client or make_client()

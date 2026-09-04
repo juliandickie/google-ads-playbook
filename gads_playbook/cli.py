@@ -1,7 +1,7 @@
 """gads command line. Global flags go after the subcommand."""
 import argparse, os, sys
 from pathlib import Path
-from . import __version__, io, schema
+from . import __version__, io, registry, schema
 
 API_SUBCOMMANDS = {"auth", "accounts", "pull"}
 
@@ -64,12 +64,7 @@ def main(argv=None):
             print("gads: uv is required for auth, accounts, and pull (brew install uv).", file=sys.stderr)
             return 2
     parser, sub = build_parser()
-    # later tasks register subcommands via register_all(sub)
-    try:
-        from . import registry
-        registry.register_all(sub, add_common)
-    except ImportError:
-        pass
+    registry.register_all(sub, add_common)
     args = parser.parse_args(argv)
     try:
         return args.func(args)

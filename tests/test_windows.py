@@ -1,4 +1,5 @@
 import json, shutil, tempfile, unittest
+from datetime import date, timedelta
 from pathlib import Path
 from gads_playbook import windows, io, schema, cli
 
@@ -111,6 +112,33 @@ class WindowTests(unittest.TestCase):
             cols = [c for c in schema.COLUMNS["campaigns"] if c != "metrics.search_budget_lost_impression_share"]
             io.write_csv(ws / "exports" / "campaigns.csv", rows, cols)
             self.assertEqual(cli.main(["windows", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
+    def test_zero_spend_window_is_not_below_breakeven(self):
+        # R42: a window with zero cost has no ROAS to judge; it must not silently count as "below
+        # break-even" (0 < any positive break-even is always true) and trigger a false cut verdict.
+        start = date(2026, 7, 3)
+        rows = []
+        for i in range(60):
+            d = start + timedelta(days=i)
+            rows.append({"segments.date": d.isoformat(), "campaign.id": "9", "campaign.name": "Search | NonBrand | BOF | ZeroSpend",
+                         "campaign.status": "ENABLED", "campaign.advertising_channel_type": "SEARCH",
+                         "campaign.bidding_strategy_type": "MAXIMIZE_CONVERSIONS", "campaign_budget.amount_micros": "100000000",
+                         "metrics.impressions": "0", "metrics.clicks": "0", "metrics.cost_micros": "0",
+                         "metrics.conversions": "0.0", "metrics.conversions_value": "0.00",
+                         "metrics.search_impression_share": "", "metrics.search_budget_lost_impression_share": "0.0",
+                         "metrics.search_rank_lost_impression_share": ""})
+        r = windows.compute(self.c + rows, target_roas=4.0, breakeven_roas=2.5)
+        by = {c["campaign"]: c for c in r["campaigns"]}
+        z = by["Search | NonBrand | BOF | ZeroSpend"]
+        self.assertEqual(z["verdict"], "hold")
+        self.assertTrue(any("no spend in the 7-day window" in s for s in z["reasons"]))
+    def test_campaign_with_no_dates_raises_missing_input(self):
+        # R42: a campaign whose rows all lack segments.date used to raise a bare IndexError inside
+        # compute(); it must raise io.MissingInput naming the campaign instead.
+        bad = [{**r, "segments.date": "", "campaign.name": "No Date Campaign"} for r in self.c[:3]]
+        rows = self.c + bad
+        with self.assertRaises(io.MissingInput) as cm:
+            windows.compute(rows, target_roas=4.0)
+        self.assertIn("No Date Campaign", str(cm.exception))
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,17 +49,43 @@ def compute(feed_rows, product_rows=None, reviews=None, min_description=500, top
         out.append({"id": pid, "title": row.get("title", ""), "score": score, "missing": missing, "revenue": revenue.get(pid, 0.0), "ranked": pid in ranked_ids})
     out.sort(key=lambda p: (not p["ranked"], -p["revenue"], p["score"]))
     rebuild = [p["id"] for p in out if p["score"] < 7]
+    feed_ids = {row.get("id", "") for row in feed_rows}
+    missing_from_feed = [pid for pid, _ in sorted(revenue.items(), key=lambda kv: -kv[1]) if pid and pid not in feed_ids]
+    missing_from_feed_revenue = {pid: revenue[pid] for pid in missing_from_feed}
     return {"products": out, "rebuild": rebuild, "scored": len(out), "reviews_state": "unknown" if reviews is None else ("yes" if reviews else "no"),
-            "min_description": min_description, "top_n": top_n}
+            "min_description": min_description, "top_n": top_n,
+            "missing_from_feed": missing_from_feed, "missing_from_feed_revenue": missing_from_feed_revenue}
 
 def render_md(result):
-    rows = [{"id": p["id"], "title": p["title"][:60], "score": f"{p['score']}/10", "rank": "top" if p["ranked"] else "", "missing": ", ".join(p["missing"])} for p in result["products"]]
+    products = result["products"]
+    top_n = result["top_n"]
+    ranked_shown = [p for p in products if p["ranked"]][:top_n]
+    ranked_shown_ids = {p["id"] for p in ranked_shown}
+    remaining = [p for p in products if p["id"] not in ranked_shown_ids]
+    lowest_shown = sorted(remaining, key=lambda p: p["score"])[:top_n]
+    shown = ranked_shown + lowest_shown
+    rows = [{"id": p["id"], "title": p["title"][:60], "score": f"{p['score']}/10", "rank": "top" if p["ranked"] else "", "missing": ", ".join(p["missing"])} for p in shown]
+    dist = {}
+    for p in products:
+        dist[p["score"]] = dist.get(p["score"], 0) + 1
+    dist_str = ", ".join(f"{s}: {dist.get(s, 0)}" for s in range(10, -1, -1) if dist.get(s, 0))
     lines = ["# Feed completeness score", "",
-             f"{result['scored']} products scored. Reviews integrated: {result['reviews_state']}. Description floor {result['min_description']} characters (the standard is fill toward 5,000).", "",
+             f"{result['scored']} products scored. Reviews integrated: {result['reviews_state']}. Description floor {result['min_description']} characters (the standard is fill toward 5,000).",
+             f"Score distribution: {dist_str or 'none'}. {len(result['rebuild'])} products need a rebuild (score under 7).", "",
              render.table(rows, ["id", "title", "score", "rank", "missing"], ["Item ID", "Title", "Score", "Revenue rank", "Missing points"]), "",
              "## Rebuild candidates (under 7)", ""]
-    lines += [f"- {pid}" for pid in result["rebuild"]] or ["- None."]
+    rebuild_shown = result["rebuild"][:top_n]
+    lines += [f"- {pid}" for pid in rebuild_shown] or ["- None."]
+    if len(result["rebuild"]) > top_n:
+        lines.append(f"- and {len(result['rebuild']) - top_n} more in feedscore.json")
     lines += ["", "Run prompt 2.6 (Merchant Center rebuild) on each candidate with its missing points listed above."]
+    missing_feed = result.get("missing_from_feed", [])
+    mf_revenue = result.get("missing_from_feed_revenue", {})
+    lines += ["", "## In products.csv but not in the feed", ""]
+    if missing_feed:
+        lines += [f"- {pid} ({mf_revenue.get(pid, 0):,.0f} revenue)" for pid in missing_feed]
+    else:
+        lines.append("None.")
     return "\n".join(lines) + "\n"
 
 def cmd_feedscore(args):
