@@ -25,6 +25,6 @@ Prompt 4.1 from `references/10-prompts.md` Part 4 with `windows.md` as the 7-day
 
 ## 4.3 ROAS drop
 
-Prompt 4.3, but work the diagnostic order from `references/09-project-instructions.md` and never skip to creative: tracking (conversion_actions.csv, and whether the measurement changed), budget or bid constraint (windows.md budget-limited and rank-lost columns), search-terms drift (fresh search_terms.csv versus the last run's misallocation.md), auction pressure, feed or landing page change, seasonality, creative fatigue last. Rank causes by probability given the data and hand back a test order.
+Prompt 4.3, but work the diagnostic order from `references/09-project-instructions.md` and never skip to creative: tracking (conversion_actions.csv, and whether the measurement changed), budget or bid constraint (the Budget limited and Rank lost impression share lines under each campaign in windows.md), search-terms drift (fresh search_terms.csv versus the last run's misallocation.md), auction pressure, feed or landing page change, seasonality, creative fatigue last. Rank causes by probability given the data and hand back a test order.
 
 Report: the verdict table from windows.md, the action list, and the one number the operator should watch until the next run.

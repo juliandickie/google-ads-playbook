@@ -79,6 +79,28 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(r["unavailable"], [])  # global/account availability is unaffected
         md = windows.render_md(r, "AUD")
         self.assertIn("Windows unavailable for this campaign (not enough history): 14 days, 30 days.", md)
+    def test_rank_lost_7d_averages_last_seven_days(self):
+        # R30: windows surfaces the 7-day rank-lost impression share average per campaign,
+        # since the gads-manage diagnostic cites it and windows.md previously had no such value.
+        r = windows.compute(self.c, target_roas=4.0, breakeven_roas=2.5)
+        by = {c["campaign"]: c for c in r["campaigns"]}
+        self.assertAlmostEqual(by["Search | NonBrand | BOF | Winner"]["rank_lost_7d"], 0.1)
+        self.assertAlmostEqual(by["Search | NonBrand | TOF | Loser"]["rank_lost_7d"], 0.5)
+    def test_rank_lost_rendered(self):
+        r = windows.compute(self.c, target_roas=4.0, breakeven_roas=2.5)
+        md = windows.render_md(r, "AUD")
+        self.assertIn("Rank lost impression share (7 days): 10.0%", md)
+    def test_rank_lost_empty_cells_render_na(self):
+        rows = _new_campaign_rows(18, 31)
+        for row in rows:
+            row["metrics.search_rank_lost_impression_share"] = ""
+        r = windows.compute(self.c + rows, target_roas=4.0, breakeven_roas=2.5)
+        by = {c["campaign"]: c for c in r["campaigns"]}
+        new = by["Search | NonBrand | BOF | New"]
+        self.assertIsNone(new["rank_lost_7d"])
+        md = windows.render_md(r, "AUD")
+        section = md.split("## Search | NonBrand | BOF | New", 1)[1]
+        self.assertIn("Rank lost impression share (7 days): n/a", section)
     def test_cmd_missing_budget_lost_column_exits_2(self):
         # R21: metrics.search_budget_lost_impression_share is a required column for `gads windows`,
         # even though empty cell values within it are fine.

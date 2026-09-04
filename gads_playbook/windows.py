@@ -75,10 +75,13 @@ def compute(campaigns, target_roas, breakeven_roas=None, end_date=None, toleranc
         bl_vals = [io.parse_percent(r.get("metrics.search_budget_lost_impression_share")) for r in last7]
         bl_vals = [v for v in bl_vals if v is not None]
         bl = bool(bl_vals) and (sum(bl_vals) / len(bl_vals)) > budget_limited
+        rl_vals = [io.parse_percent(r.get("metrics.search_rank_lost_impression_share")) for r in last7]
+        rl_vals = [v for v in rl_vals if v is not None]
+        rank_lost_7d = (sum(rl_vals) / len(rl_vals)) if rl_vals else None
         step = {"scale": "raise budget 20 percent, re-read in 72 hours", "cut": "pause or cut budget by half and rework structure before re-testing", "hold": "no budget change"}[verdict]
         if verdict == "scale" and not bl:
             step += " (not budget-limited: check rank-lost impression share before adding budget)"
-        out.append({"campaign": name, "windows": wins, "verdict": verdict, "reasons": reasons, "budget_limited": bl, "step": step, "unavailable": camp_unavailable})
+        out.append({"campaign": name, "windows": wins, "verdict": verdict, "reasons": reasons, "budget_limited": bl, "rank_lost_7d": rank_lost_7d, "step": step, "unavailable": camp_unavailable})
     acct = {L: _window(campaigns, end, L) for L in available}
     return {"end_date": end.isoformat(), "campaigns": out, "account": {"windows": acct}, "unavailable": unavailable,
             "target_roas": target_roas, "breakeven_roas": breakeven_roas, "tolerance": tolerance}
@@ -104,7 +107,7 @@ def render_md(result, currency=""):
         lines.append(render.table(_window_table_rows(c["windows"], currency), _WIN_COLS, _WIN_HEADS))
         if c.get("unavailable"):
             lines.append(f"Windows unavailable for this campaign (not enough history): {', '.join(str(x) + ' days' for x in c['unavailable'])}.")
-        lines += ["", f"Verdict: {c['verdict']}", "Reasons: " + "; ".join(c["reasons"]), f"Budget limited: {'yes' if c['budget_limited'] else 'no'}", f"Step: {c['step']}"]
+        lines += ["", f"Verdict: {c['verdict']}", "Reasons: " + "; ".join(c["reasons"]), f"Budget limited: {'yes' if c['budget_limited'] else 'no'}", f"Rank lost impression share (7 days): {render.pct(c['rank_lost_7d'])}", f"Step: {c['step']}"]
     lines += ["", "## Account", ""]
     lines.append(render.table(_window_table_rows(result["account"]["windows"], currency), _WIN_COLS, _WIN_HEADS))
     return "\n".join(lines) + "\n"
@@ -113,7 +116,7 @@ def cmd_windows(args):
     from .cli import workspace_from
     ws = workspace_from(args)
     data = io.load_workspace(ws)
-    camps = io.require(ws / "exports" / "campaigns.csv", ["segments.date", "campaign.name", "metrics.cost_micros", "metrics.conversions", "metrics.conversions_value", "metrics.search_budget_lost_impression_share"])
+    camps = io.require(ws / "exports" / "campaigns.csv", ["segments.date", "campaign.name", "metrics.cost_micros", "metrics.conversions", "metrics.conversions_value", "metrics.search_budget_lost_impression_share", "metrics.search_rank_lost_impression_share"])
     target = args.target_roas or data.get("target_roas")
     if not target:
         raise io.MissingInput("no target ROAS. Pass --target-roas or set target_roas in gads.json (gads setup).")
