@@ -26,7 +26,7 @@ Also listed in the outfit and loadout catalogs. Requires Python 3.12+, `uv`, and
 
 1. In Google Cloud: a project with the Google Ads API enabled and an OAuth desktop client. Download the client JSON.
 2. In Google Ads: the developer token from your manager account's API Center (Explorer access or better).
-3. Run `gads auth --client-json <file> --login-customer-id <mcc id>`. It writes `~/.config/google-ads-playbook/adc.json` and `google-ads.yaml`.
+3. Run `gads auth --client-json <file> --login-customer-id <mcc id>`. It writes `~/.config/google-ads-playbook/adc.json` (with the GCP project from the client JSON as its quota project) and `google-ads.yaml`.
 4. Set the plugin config (`/plugin` settings): developer token, GCP project id, MCC id, and the absolute path to `adc.json`. The token lives in both places on purpose; rotate both.
 5. `gads accounts --login-customer <mcc id>` should list your clients. Then `/gads setup`.
 

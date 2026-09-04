@@ -28,6 +28,41 @@ class AuthFilesTests(unittest.TestCase):
             paths = auth.write_credential_files(Path(d), "cid", "csec", "rtok", "DEVTOKEN", "1234567890")
             self.assertEqual(stat.S_IMODE(os.stat(paths["adc"]).st_mode), 0o600)
 
+    def test_quota_project_id_included_when_given(self):
+        with tempfile.TemporaryDirectory() as d:
+            paths = auth.write_credential_files(Path(d), "cid", "csec", "rtok", "DEVTOKEN", "1234567890",
+                                                  quota_project_id="example-project-123456")
+            adc = paths["adc"].read_text()
+            self.assertIn('"quota_project_id": "example-project-123456"', adc)
+            self.assertIn('"type": "authorized_user"', adc)
+            self.assertEqual(stat.S_IMODE(os.stat(paths["adc"]).st_mode), 0o600)
+
+    def test_quota_project_id_absent_when_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            paths = auth.write_credential_files(Path(d), "cid", "csec", "rtok", "DEVTOKEN", "1234567890",
+                                                  quota_project_id=None)
+            adc = paths["adc"].read_text()
+            self.assertNotIn("quota_project_id", adc)
+
+class ReadClientProjectTests(unittest.TestCase):
+    def test_installed_project_id(self):
+        with tempfile.TemporaryDirectory() as d:
+            client_json = Path(d) / "client.json"
+            client_json.write_text('{"installed": {"client_id": "x", "project_id": "p-1"}}')
+            self.assertEqual(auth.read_client_project(client_json), "p-1")
+
+    def test_web_project_id(self):
+        with tempfile.TemporaryDirectory() as d:
+            client_json = Path(d) / "client.json"
+            client_json.write_text('{"web": {"project_id": "p-2"}}')
+            self.assertEqual(auth.read_client_project(client_json), "p-2")
+
+    def test_no_project_id(self):
+        with tempfile.TemporaryDirectory() as d:
+            client_json = Path(d) / "client.json"
+            client_json.write_text("{}")
+            self.assertEqual(auth.read_client_project(client_json), "")
+
 class ReadOpTests(unittest.TestCase):
     # Ruling R26: a missing op binary or a failed op read must raise io.MissingInput naming the
     # reference and the op error text, never a raw traceback out of cmd_auth.
@@ -51,9 +86,9 @@ class CmdAuthNormalisationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             config_dir = Path(d) / "config"
             client_json = Path(d) / "client.json"
-            client_json.write_text("{}")
+            client_json.write_text('{"installed": {"client_id": "x", "project_id": "p-1"}}')
             args = argparse.Namespace(client_json=str(client_json), login_customer_id="123-456-7890",
-                                      developer_token="DEVTOKEN", op_ref=None)
+                                      developer_token="DEVTOKEN", op_ref=None, gcp_project=None)
             with mock.patch.object(auth, "CONFIG_DIR", config_dir), \
                  mock.patch.object(auth, "run_oauth", return_value=("c", "s", "r")):
                 with contextlib.redirect_stdout(StringIO()):
@@ -61,3 +96,31 @@ class CmdAuthNormalisationTests(unittest.TestCase):
             yaml_text = (config_dir / "google-ads.yaml").read_text()
             self.assertIn("login_customer_id: 1234567890", yaml_text)
             self.assertNotIn("123-456-7890", yaml_text)
+
+    def test_quota_project_id_from_client_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_dir = Path(d) / "config"
+            client_json = Path(d) / "client.json"
+            client_json.write_text('{"installed": {"client_id": "x", "project_id": "p-1"}}')
+            args = argparse.Namespace(client_json=str(client_json), login_customer_id="1234567890",
+                                      developer_token="DEVTOKEN", op_ref=None, gcp_project=None)
+            with mock.patch.object(auth, "CONFIG_DIR", config_dir), \
+                 mock.patch.object(auth, "run_oauth", return_value=("c", "s", "r")):
+                with contextlib.redirect_stdout(StringIO()):
+                    self.assertEqual(auth.cmd_auth(args), 0)
+            adc_text = (config_dir / "adc.json").read_text()
+            self.assertIn('"quota_project_id": "p-1"', adc_text)
+
+    def test_gcp_project_override_wins(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_dir = Path(d) / "config"
+            client_json = Path(d) / "client.json"
+            client_json.write_text('{"installed": {"client_id": "x", "project_id": "p-1"}}')
+            args = argparse.Namespace(client_json=str(client_json), login_customer_id="1234567890",
+                                      developer_token="DEVTOKEN", op_ref=None, gcp_project="override-1")
+            with mock.patch.object(auth, "CONFIG_DIR", config_dir), \
+                 mock.patch.object(auth, "run_oauth", return_value=("c", "s", "r")):
+                with contextlib.redirect_stdout(StringIO()):
+                    self.assertEqual(auth.cmd_auth(args), 0)
+            adc_text = (config_dir / "adc.json").read_text()
+            self.assertIn('"quota_project_id": "override-1"', adc_text)

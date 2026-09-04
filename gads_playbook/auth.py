@@ -12,11 +12,14 @@ def _write_0600(path, text):
     with os.fdopen(fd, "w") as f:
         f.write(text)
 
-def write_credential_files(config_dir, client_id, client_secret, refresh_token, developer_token, login_customer_id):
+def write_credential_files(config_dir, client_id, client_secret, refresh_token, developer_token, login_customer_id, quota_project_id=None):
     config_dir = Path(config_dir)
     config_dir.mkdir(parents=True, exist_ok=True)
     adc = config_dir / "adc.json"
-    _write_0600(adc, json.dumps({"client_id": client_id, "client_secret": client_secret, "refresh_token": refresh_token, "type": "authorized_user"}, indent=2) + "\n")
+    adc_obj = {"client_id": client_id, "client_secret": client_secret, "refresh_token": refresh_token, "type": "authorized_user"}
+    if quota_project_id:
+        adc_obj["quota_project_id"] = quota_project_id
+    _write_0600(adc, json.dumps(adc_obj, indent=2) + "\n")
     yaml = config_dir / "google-ads.yaml"
     _write_0600(yaml, "\n".join([f"developer_token: {developer_token}", f"client_id: {client_id}", f"client_secret: {client_secret}",
                                f"refresh_token: {refresh_token}", f"login_customer_id: {login_customer_id}", "use_proto_plus: true"]) + "\n")
@@ -29,6 +32,13 @@ def run_oauth(client_json):
     flow = InstalledAppFlow.from_client_secrets_file(str(client_json), scopes=SCOPES)
     creds = flow.run_local_server(port=0, prompt="consent", access_type="offline")
     return creds.client_id, creds.client_secret, creds.refresh_token
+
+def read_client_project(client_json):
+    """Return the GCP project id from an OAuth desktop client secrets JSON (installed.project_id
+    or web.project_id), or "" when neither is present, so the quota project can be recorded in
+    adc.json without a separate gcloud lookup."""
+    data = json.loads(Path(client_json).read_text())
+    return data.get("installed", {}).get("project_id") or data.get("web", {}).get("project_id") or ""
 
 def _read_op(ref):
     """Read a developer token from 1Password (ruling R26). Wraps a missing op binary, an unauthenticated
@@ -52,8 +62,10 @@ def cmd_auth(args):
         import getpass
         token = getpass.getpass("Google Ads developer token (from the manager account API Center): ").strip()
     cid, csec, rtok = run_oauth(client_json)
-    paths = write_credential_files(CONFIG_DIR, cid, csec, rtok, token, args.login_customer_id.replace("-", ""))
-    print(f"auth: wrote {paths['adc']} and {paths['yaml']} (mode 600). Set adc_path in the plugin config to {paths['adc']}.")
+    quota_project_id = getattr(args, "gcp_project", None) or read_client_project(client_json)
+    paths = write_credential_files(CONFIG_DIR, cid, csec, rtok, token, args.login_customer_id.replace("-", ""), quota_project_id=quota_project_id)
+    quota_note = f"quota project {quota_project_id}" if quota_project_id else "no quota project found in the client JSON"
+    print(f"auth: wrote {paths['adc']} and {paths['yaml']} (mode 600, {quota_note}). Set adc_path in the plugin config to {paths['adc']}.")
     return 0
 
 def register(sub, add_common):
@@ -62,4 +74,5 @@ def register(sub, add_common):
     p.add_argument("--login-customer-id", required=True, help="manager (MCC) customer id, digits only")
     p.add_argument("--developer-token", help="developer token; omit to be prompted")
     p.add_argument("--op-ref", help="1Password reference, e.g. op://<vault>/<item>/<field>")
+    p.add_argument("--gcp-project", help="GCP project id for adc.json's quota_project_id; overrides the client JSON's project_id")
     p.set_defaults(func=cmd_auth)
