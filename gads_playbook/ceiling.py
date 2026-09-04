@@ -13,14 +13,27 @@ def _col(row, names):
             return row[n]
     return ""
 
+def _join_or(items):
+    if len(items) <= 1:
+        return items[0] if items else ""
+    if len(items) == 2:
+        return f"{items[0]} or {items[1]}"
+    return ", ".join(items[:-1]) + f", or {items[-1]}"
+
+def _bid_mid(row):
+    low_raw, high_raw = _col(row, COLS["low"]), _col(row, COLS["high"])
+    low_present, high_present = str(low_raw).strip() != "", str(high_raw).strip() != ""
+    if low_present and high_present:
+        return (io.parse_number(low_raw) + io.parse_number(high_raw)) / 2
+    if low_present:
+        return io.parse_number(low_raw)
+    if high_present:
+        return io.parse_number(high_raw)
+    return 0.0
+
 def _block(rows, ctr, cvr, aov, margin, cpc_override):
     volume = sum(io.parse_number(_col(r, COLS["volume"])) for r in rows)
-    weighted = 0.0
-    for r in rows:
-        v = io.parse_number(_col(r, COLS["volume"]))
-        low, high = io.parse_number(_col(r, COLS["low"])), io.parse_number(_col(r, COLS["high"]))
-        mid = (low + high) / 2 if (low or high) else 0.0
-        weighted += v * mid
+    weighted = sum(io.parse_number(_col(r, COLS["volume"])) * _bid_mid(r) for r in rows)
     cpc = cpc_override if cpc_override is not None else ((weighted / volume) if volume else 0.0)
     clicks = volume * ctr
     purchases = clicks * cvr
@@ -31,8 +44,14 @@ def _block(rows, ctr, cvr, aov, margin, cpc_override):
             "keywords": [_col(r, COLS["keyword"]) for r in rows]}
 
 def compute(rows, brand, aov, margin, brand_ctr=0.20, brand_cvr=0.10, nb_ctr=0.04, nb_cvr=0.02, brand_cpc=None, nb_cpc=None):
-    if not rows or not any(n in rows[0] for n in COLS["keyword"]):
-        raise io.MissingInput("Keyword Planner export needs a Keyword column and Avg. monthly searches.")
+    header = rows[0] if rows else {}
+    if not any(n in header for n in COLS["keyword"]):
+        raise io.MissingInput(f"Keyword Planner export is missing a keyword column ({_join_or(COLS['keyword'])}). Export the Keyword ideas table again with those columns.")
+    if not any(n in header for n in COLS["volume"]):
+        raise io.MissingInput(f"Keyword Planner export is missing a volume column ({_join_or(COLS['volume'])}). Export the Keyword ideas table again with those columns.")
+    has_bid = any(n in header for n in COLS["low"] + COLS["high"])
+    if not has_bid and (brand_cpc is None or nb_cpc is None):
+        raise io.MissingInput(f"Keyword Planner export is missing bid columns ({_join_or(COLS['low'] + COLS['high'])}). Pass --brand-cpc and --nonbrand-cpc instead.")
     b_rows = [r for r in rows if brand.is_branded(_col(r, COLS["keyword"]))]
     n_rows = [r for r in rows if r not in b_rows]
     b = _block(b_rows, brand_ctr, brand_cvr, aov, margin, brand_cpc)
@@ -62,21 +81,24 @@ def render_md(result, currency=""):
     return "\n".join(lines) + "\n"
 
 def cmd_ceiling(args):
+    from .cli import workspace_from
     planner = Path(args.planner).expanduser()
     if not planner.exists():
         raise io.MissingInput(f"no Keyword Planner export at {planner}.")
     rows = io.read_csv(planner)
+    try:
+        ws = workspace_from(args)
+    except io.MissingInput:
+        ws = None
     tokens = [t.strip() for t in (args.brand or "").split(",") if t.strip()]
-    if not tokens and args.workspace:
-        from .cli import workspace_from
-        tokens = io.load_workspace(workspace_from(args)).get("brand_tokens") or []
+    if not tokens and ws is not None:
+        tokens = io.load_workspace(ws).get("brand_tokens") or []
     if not tokens:
         raise io.MissingInput("no brand tokens. Pass --brand 'Name,Alt name' or a workspace with brand_tokens.")
     result = compute(rows, Brand(tokens), args.aov, args.margin, args.brand_ctr, args.brand_cvr, args.nonbrand_ctr, args.nonbrand_cvr, args.brand_cpc, args.nonbrand_cpc)
     md = render_md(result, args.currency)
-    if args.workspace:
-        from .cli import workspace_from
-        out = io.run_dir(workspace_from(args), args.run_date)
+    if ws is not None:
+        out = io.run_dir(ws, args.run_date)
         (out / "ceiling.md").write_text(md)
         (out / "ceiling.json").write_text(json.dumps(result, indent=2))
         print(f"ceiling: revenue {result['total']['revenue']:,.0f}, profit {result['total']['profit']:,.0f} -> {out / 'ceiling.md'}")
