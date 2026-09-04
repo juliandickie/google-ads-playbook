@@ -26,6 +26,15 @@ def read_csv(path):
     delim = "\t" if lines[0].count("\t") > lines[0].count(",") else ","
     return [dict(r) for r in csv.DictReader(lines, delimiter=delim)]
 
+def read_header(path):
+    """Return the header row of a CSV/TSV as a list of column names, or None if the file has no header line (empty or whitespace only)."""
+    text = _decode(path)
+    lines = text.splitlines()
+    if not lines or not lines[0].strip():
+        return None
+    delim = "\t" if lines[0].count("\t") > lines[0].count(",") else ","
+    return next(csv.reader([lines[0]], delimiter=delim))
+
 def write_csv(path, rows, columns):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,13 +81,13 @@ def require(path, columns):
     path = Path(path)
     if not path.exists():
         raise MissingInput(f"missing {path.name} at {path}. Run gads pull or gads normalise first.")
-    rows = read_csv(path)
-    header = set(rows[0].keys()) if rows else set()
-    if rows:
-        missing = [c for c in columns if c not in header]
-        if missing:
-            raise MissingInput(f"{path.name} is missing columns: {', '.join(missing)}")
-    return rows
+    header = read_header(path)
+    if header is None:
+        raise MissingInput(f"{path.name} is empty. Run gads pull or gads normalise first.")
+    missing = [c for c in columns if c not in header]
+    if missing:
+        raise MissingInput(f"{path.name} is missing columns: {', '.join(missing)}")
+    return read_csv(path)
 
 def load_workspace(ws):
     p = Path(ws) / "gads.json"

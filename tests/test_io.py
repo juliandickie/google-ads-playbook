@@ -42,6 +42,25 @@ class CsvTests(unittest.TestCase):
         with self.assertRaises(io.MissingInput) as cm:
             io.require(Path("/nonexistent/exports/campaigns.csv"), ["campaign.name"])
         self.assertIn("campaigns.csv", str(cm.exception))
+    def test_require_header_only_missing_column_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "campaigns.csv"
+            io.write_csv(p, [], ["campaign.name"])
+            with self.assertRaises(io.MissingInput) as cm:
+                io.require(p, ["campaign.name", "metrics.cost_micros"])
+            self.assertIn("metrics.cost_micros", str(cm.exception))
+    def test_require_empty_file_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "campaigns.csv"
+            p.write_bytes(b"")
+            with self.assertRaises(io.MissingInput) as cm:
+                io.require(p, ["campaign.name"])
+            self.assertIn("campaigns.csv", str(cm.exception))
+    def test_require_header_only_all_columns_returns_empty(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "search_terms.csv"
+            io.write_csv(p, [], ["campaign.name", "metrics.cost_micros"])
+            self.assertEqual(io.require(p, ["campaign.name", "metrics.cost_micros"]), [])
 
 class WorkspaceTests(unittest.TestCase):
     def test_load_save_and_run_dir(self):
