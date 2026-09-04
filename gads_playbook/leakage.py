@@ -10,8 +10,19 @@ def _num(v):
 def _int(v):
     return int(float(v)) if (v or "") != "" else 0
 
-def compute(campaigns, terms, brand, keywords=None, flag_share=0.20):
+def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=None):
+    windows = windows or {}
+    campaign_start, campaign_end = windows.get("window_start") or "", windows.get("window_end") or ""
+    search_terms_start = windows.get("search_terms_window_start") or ""
+    campaign_window = f"{campaign_start} to {campaign_end}" if campaign_start and campaign_end else ""
+    search_terms_window = f"{search_terms_start} to {campaign_end}" if search_terms_start and campaign_end else ""
     assumptions = []
+    if search_terms_start and search_terms_start != campaign_start:
+        assumptions.append(
+            f"Search terms cover {search_terms_start} to {campaign_end} while campaigns cover {campaign_start} to {campaign_end}; "
+            "branded share and true new-customer ROAS mix the two windows and over-state leakage. "
+            "Re-run gads pull with --search-terms-days equal to --days for a window-consistent read."
+        )
     kinds, channel = {}, {}
     for r in campaigns:
         name = r["campaign.name"]
@@ -76,6 +87,8 @@ def compute(campaigns, terms, brand, keywords=None, flag_share=0.20):
         "reverse_leak_value": sum(p["nonbranded_value"] for p in reverse),
         "flag": bool(nb_value and (nb_branded_value / nb_value) > flag_share),
         "flag_share": flag_share,
+        "campaign_window": campaign_window,
+        "search_terms_window": search_terms_window,
     }
     other_total = sum(p["other_cost"] for p in per if not p["kind"].startswith("pmax"))
     if other_total:
@@ -91,6 +104,13 @@ def render_md(result, currency=""):
                      "branded_cost": render.money(p["branded_cost"], currency), "nonbranded_cost": render.money(p["nonbranded_cost"], currency),
                      "other": render.money(p["other_cost"], currency)})
     lines = ["# Branded leakage audit", ""]
+    window_parts = []
+    if a.get("campaign_window"):
+        window_parts.append(f"Campaign window {a['campaign_window']}.")
+    if a.get("search_terms_window"):
+        window_parts.append(f"Search terms window {a['search_terms_window']}.")
+    if window_parts:
+        lines += [" ".join(window_parts), ""]
     lines.append(render.table(rows, ["campaign", "kind", "cost", "branded_cost", "branded_value", "nonbranded_cost", "nonbranded_value", "other"],
                               ["Campaign", "Kind", "Cost", "Branded cost", "Branded value", "Non-branded cost", "Non-branded value", "Unattributed cost"]))
     lines += ["", "## Before and after", "",
@@ -117,7 +137,11 @@ def cmd_leakage(args):
     terms = io.require(ws / "exports" / "search_terms.csv", ["search_term_view.search_term", "campaign.name", "metrics.cost_micros", "metrics.conversions_value"])
     kw_path = ws / "exports" / "keywords.csv"
     keywords = io.read_csv(kw_path) if kw_path.exists() else None
-    result = compute(camps, terms, brand, keywords, flag_share=args.flag_share)
+    result = compute(camps, terms, brand, keywords, flag_share=args.flag_share, windows={
+        "window_start": data.get("window_start"),
+        "window_end": data.get("window_end"),
+        "search_terms_window_start": data.get("search_terms_window_start"),
+    })
     out = io.run_dir(ws, args.run_date)
     (out / "leakage.md").write_text(render_md(result, data.get("currency", "")))
     (out / "leakage.json").write_text(json.dumps(result, indent=2))

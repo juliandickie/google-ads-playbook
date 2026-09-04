@@ -59,5 +59,34 @@ class LeakageTests(unittest.TestCase):
             from gads_playbook.cli import main
             self.assertEqual(main(["leakage", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
 
+class WindowTests(unittest.TestCase):
+    def setUp(self):
+        self.c = io.read_csv(WS / "exports" / "campaigns.csv")
+        self.t = io.read_csv(WS / "exports" / "search_terms.csv")
+        self.k = io.read_csv(WS / "exports" / "keywords.csv")
+        self.b = Brand(["NordVital"])
+        # matches tests/fixtures/ws/gads.json
+        self.differing_windows = {"window_start": "2026-06-03", "window_end": "2026-08-31", "search_terms_window_start": "2026-03-04"}
+    def test_differing_windows_flag_the_mismatch(self):
+        r = leakage.compute(self.c, self.t, self.b, self.k, windows=self.differing_windows)
+        self.assertTrue(any("mix the two windows" in s for s in r["assumptions"]))
+        md = leakage.render_md(r, "AUD")
+        self.assertIn("Search terms window 2026-03-04 to 2026-08-31", md)
+    def test_matching_windows_add_no_assumption(self):
+        matching = {"window_start": "2026-06-03", "window_end": "2026-08-31", "search_terms_window_start": "2026-06-03"}
+        r = leakage.compute(self.c, self.t, self.b, self.k, windows=matching)
+        self.assertFalse(any("mix the two windows" in s for s in r["assumptions"]))
+    def test_empty_search_terms_reports_the_other_spend_gap(self):
+        r = leakage.compute(self.c, [], self.b)
+        search_campaigns = [p for p in r["per_campaign"] if p["kind"] in ("brand", "nonbrand")]
+        self.assertTrue(search_campaigns)
+        for p in search_campaigns:
+            self.assertEqual(p["other_cost"], p["cost"])
+        self.assertTrue(any("privacy threshold" in s for s in r["assumptions"]))
+    def test_default_keywords_none_still_classifies_by_name(self):
+        r = leakage.compute(self.c, self.t, self.b, keywords=None)
+        by = {x["campaign"]: x for x in r["per_campaign"]}
+        self.assertEqual(by["Search | Brand | BOF | AU"]["kind"], "brand")
+
 if __name__ == "__main__":
     unittest.main()
