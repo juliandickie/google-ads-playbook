@@ -1,7 +1,7 @@
 """Subcommand registry. Each module exposes register(sub, add_common)."""
-from . import normalise, leakage
+from . import normalise, leakage, misallocate
 
-MODULES = [normalise, leakage]
+MODULES = [normalise, leakage, misallocate]
 
 def register_all(sub, add_common):
     for m in MODULES:
