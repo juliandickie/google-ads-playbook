@@ -17,7 +17,7 @@ Run:
 ${CLAUDE_PLUGIN_ROOT}/bin/gads auth --client-json <path> --login-customer-id <mcc id> [--op-ref "op://..."]
 ```
 
-It opens a browser consent, then writes `~/.config/google-ads-playbook/adc.json` and `google-ads.yaml` (mode 600). Tell the operator to set the plugin's `adc_path`, `developer_token`, `gcp_project_id`, and `login_customer_id` in the plugin config so the bundled MCP can start. The token is stored twice on purpose (keychain for the MCP, yaml for the CLI); say so.
+It opens a browser consent, then writes `~/.config/google-ads-playbook/adc.json` and `google-ads.yaml` (mode 600). adc.json also records the OAuth client's GCP project as its quota project (override with `--gcp-project`); use the same project id for the plugin's `gcp_project_id` value. Tell the operator to set the plugin's `adc_path`, `developer_token`, `gcp_project_id`, and `login_customer_id` in the plugin config so the bundled MCP can start. The token is stored twice on purpose (keychain for the MCP, yaml for the CLI); say so.
 
 Check: `${CLAUDE_PLUGIN_ROOT}/bin/gads accounts --login-customer <mcc id>` lists the client accounts. If the API answers that the token is only approved for test accounts, stop and explain the API Center access request; nothing downstream will work.
 

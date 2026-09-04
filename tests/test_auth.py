@@ -63,6 +63,14 @@ class ReadClientProjectTests(unittest.TestCase):
             client_json.write_text("{}")
             self.assertEqual(auth.read_client_project(client_json), "")
 
+    def test_malformed_json_raises_missing_input_naming_the_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            client_json = Path(d) / "client.json"
+            client_json.write_text("{not json")
+            with self.assertRaises(io.MissingInput) as cm:
+                auth.read_client_project(client_json)
+            self.assertIn(str(client_json), str(cm.exception))
+
 class ReadOpTests(unittest.TestCase):
     # Ruling R26: a missing op binary or a failed op read must raise io.MissingInput naming the
     # reference and the op error text, never a raw traceback out of cmd_auth.

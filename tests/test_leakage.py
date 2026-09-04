@@ -61,7 +61,8 @@ class LeakageTests(unittest.TestCase):
             del data["brand_tokens"]
             (ws / "gads.json").write_text(json.dumps(data))
             from gads_playbook.cli import main
-            self.assertEqual(main(["leakage", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
+            with contextlib.redirect_stderr(StringIO()):
+                self.assertEqual(main(["leakage", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
 
 class WindowTests(unittest.TestCase):
     def setUp(self):
@@ -123,6 +124,16 @@ class OtherChannelTests(unittest.TestCase):
         self.assertIn("## Other channels", md)
         self.assertIn("Display | Remarketing", md)
         self.assertTrue(any("Non-search campaigns" in s and "Display | Remarketing" in s for s in r["assumptions"]))
+    def test_other_channel_other_cost_is_none_and_excluded_from_privacy_gap(self):
+        # An other-channel campaign has no search terms to compare against, so its other_cost is
+        # always None (never a misleading number), and it must not appear in the privacy-threshold
+        # assumption when the campaign and search-terms windows are unknown (neither given).
+        r = leakage.compute(self.c + [self.display_row], self.t, self.b, self.k)
+        by = {x["campaign"]: x for x in r["per_campaign"]}
+        self.assertIsNone(by["Display | Remarketing"]["other_cost"])
+        privacy_assumptions = [s for s in r["assumptions"] if "privacy threshold" in s]
+        for s in privacy_assumptions:
+            self.assertNotIn("Display | Remarketing", s)
 
 class TermsOnlyTests(unittest.TestCase):
     # R33: a campaign present in search_terms.csv but absent from campaigns.csv is a phantom row, not a

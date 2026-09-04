@@ -160,7 +160,8 @@ class CliTests(unittest.TestCase):
     def test_unknown_report_via_cli_exits_2_and_writes_nothing(self):
         with tempfile.TemporaryDirectory() as d:
             ws = Path(d)
-            code = cli_main(["normalise", str(FIX / "unknown_report.csv"), "--workspace", str(ws)])
+            with contextlib.redirect_stderr(StringIO()):
+                code = cli_main(["normalise", str(FIX / "unknown_report.csv"), "--workspace", str(ws)])
             self.assertEqual(code, 2)
             self.assertFalse((ws / "exports").exists() and any((ws / "exports").iterdir()))
     def test_nonexistent_path_via_cli_exits_2_and_writes_nothing(self):

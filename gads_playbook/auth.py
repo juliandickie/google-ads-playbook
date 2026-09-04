@@ -36,8 +36,13 @@ def run_oauth(client_json):
 def read_client_project(client_json):
     """Return the GCP project id from an OAuth desktop client secrets JSON (installed.project_id
     or web.project_id), or "" when neither is present, so the quota project can be recorded in
-    adc.json without a separate gcloud lookup."""
-    data = json.loads(Path(client_json).read_text())
+    adc.json without a separate gcloud lookup. A missing file, an unreadable file, or malformed
+    JSON is wrapped into io.MissingInput naming the path, never a raw traceback out of cmd_auth."""
+    path = Path(client_json)
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        raise io.MissingInput(f"{path} is not a readable OAuth client JSON: {e}") from e
     return data.get("installed", {}).get("project_id") or data.get("web", {}).get("project_id") or ""
 
 def _read_op(ref):

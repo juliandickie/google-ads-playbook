@@ -1,5 +1,6 @@
-import json, shutil, tempfile, unittest
+import contextlib, json, shutil, tempfile, unittest
 from datetime import date, timedelta
+from io import StringIO
 from pathlib import Path
 from gads_playbook import windows, io, schema, cli
 
@@ -111,7 +112,8 @@ class WindowTests(unittest.TestCase):
             rows = io.read_csv(ws / "exports" / "campaigns.csv")
             cols = [c for c in schema.COLUMNS["campaigns"] if c != "metrics.search_budget_lost_impression_share"]
             io.write_csv(ws / "exports" / "campaigns.csv", rows, cols)
-            self.assertEqual(cli.main(["windows", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
+            with contextlib.redirect_stderr(StringIO()):
+                self.assertEqual(cli.main(["windows", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
     def test_zero_spend_window_is_not_below_breakeven(self):
         # R42: a window with zero cost has no ROAS to judge; it must not silently count as "below
         # break-even" (0 < any positive break-even is always true) and trigger a false cut verdict.
