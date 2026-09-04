@@ -191,6 +191,8 @@ def normalise_rows(report_type, rows, header=None):
 
 def normalise_file(path):
     path = Path(path)
+    if not path.exists():
+        raise io.MissingInput(f"{path} does not exist. Export from the Google Ads UI and pass the file or its folder.")
     text = io._decode(path)
     lines = text.splitlines()
     try:
@@ -230,13 +232,30 @@ def normalise_into_workspace(paths, ws):
         written[report_type] = out
     return written
 
+def _resolve_paths(raw_paths):
+    """Expand each path argument into concrete files, failing loud instead of a silent
+    no-op. A path that does not exist, or a directory holding no *.csv files, raises
+    io.MissingInput naming it, before any parsing or writing happens."""
+    paths = []
+    for a in raw_paths:
+        a = Path(a).expanduser()
+        if not a.exists():
+            raise io.MissingInput(f"{a} does not exist. Export from the Google Ads UI and pass the file or its folder.")
+        if a.is_dir():
+            found = sorted(a.glob("*.csv"))
+            if not found:
+                raise io.MissingInput(f"{a} holds no CSV exports (no *.csv files found).")
+            paths += found
+        else:
+            paths.append(a)
+    if not paths:
+        raise io.MissingInput("no input files were given.")
+    return paths
+
 def cmd_normalise(args):
     from .cli import workspace_from
     ws = workspace_from(args)
-    paths = []
-    for a in args.paths:
-        a = Path(a).expanduser()
-        paths += sorted(a.glob("*.csv")) if a.is_dir() else [a]
+    paths = _resolve_paths(args.paths)
     written = normalise_into_workspace(paths, ws)
     for t, p in written.items():
         print(f"{t}: {len(io.read_csv(p))} rows -> {p}")

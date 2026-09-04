@@ -1,4 +1,5 @@
-import shutil, tempfile, unittest
+import contextlib, shutil, tempfile, unittest
+from io import StringIO
 from pathlib import Path
 from gads_playbook import normalise, io, schema
 from gads_playbook.cli import main as cli_main
@@ -96,6 +97,10 @@ class FileTests(unittest.TestCase):
             p.write_text("Campaign report (x)\nDay,Campaign,Cost,Conversions,Conv. value\n")
             t, rows = normalise.normalise_file(p)
             self.assertEqual((t, rows), ("campaigns", []))
+    def test_missing_path_names_it(self):
+        with self.assertRaises(io.MissingInput) as cm:
+            normalise.normalise_file(Path("/nonexistent/x.csv"))
+        self.assertIn("x.csv", str(cm.exception))
 
 class MixedFolderTests(unittest.TestCase):
     def test_bad_file_in_batch_leaves_workspace_untouched(self):
@@ -117,6 +122,25 @@ class CliTests(unittest.TestCase):
             code = cli_main(["normalise", str(FIX / "unknown_report.csv"), "--workspace", str(ws)])
             self.assertEqual(code, 2)
             self.assertFalse((ws / "exports").exists() and any((ws / "exports").iterdir()))
+    def test_nonexistent_path_via_cli_exits_2_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d)
+            err = StringIO()
+            with contextlib.redirect_stderr(err):
+                code = cli_main(["normalise", "/nonexistent/export.csv", "--workspace", str(ws)])
+            self.assertEqual(code, 2)
+            self.assertFalse(any(ws.iterdir()))
+    def test_empty_directory_via_cli_exits_2_and_names_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            empty = Path(d) / "empty"
+            empty.mkdir()
+            ws = Path(d) / "ws"
+            err = StringIO()
+            with contextlib.redirect_stderr(err):
+                code = cli_main(["normalise", str(empty), "--workspace", str(ws)])
+            self.assertEqual(code, 2)
+            self.assertIn(str(empty), err.getvalue())
+            self.assertFalse(ws.exists() and any(ws.iterdir()))
 
 if __name__ == "__main__":
     unittest.main()
