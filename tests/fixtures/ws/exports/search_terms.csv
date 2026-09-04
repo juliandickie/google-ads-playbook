@@ -1,0 +1,9 @@
+campaign.id,campaign.name,ad_group.id,ad_group.name,search_term_view.search_term,segments.search_term_match_type,metrics.impressions,metrics.clicks,metrics.cost_micros,metrics.conversions,metrics.conversions_value
+,Search | Brand | BOF | AU,,Brand exact,nordvital magnesium,EXACT,3000,900,270000000,90.0,8100.0
+,Search | Brand | BOF | AU,,Brand exact,nordvital,EXACT,2000,700,210000000,70.0,6300.0
+,Search | NonBrand | BOF | Magnesium,,Magnesium glycinate,nordvital magnesium glycinate,PHRASE,1500,300,300000000,30.0,2700.0
+,Search | NonBrand | BOF | Magnesium,,Magnesium glycinate,magnesium glycinate for sleep,PHRASE,9000,600,900000000,12.0,1080.0
+,Search | NonBrand | BOF | Magnesium,,Magnesium glycinate,magnesium bisglycinate 400mg,EXACT,400,60,29000000,15.0,1350.0
+,Search | NonBrand | BOF | Magnesium,,Magnesium generic,cheap magnesium tablets,BROAD,12000,800,1100000000,6.0,540.0
+,Search | NonBrand | BOF | Magnesium,,Magnesium generic,best sleep supplement,BROAD,6000,400,500000000,7.0,630.0
+,Search | Brand | BOF | AU,,Brand exact,magnesium powder,PHRASE,300,40,18000000,1.0,90.0

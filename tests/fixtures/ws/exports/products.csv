@@ -1,0 +1,3 @@
+campaign.id,campaign.name,segments.product_item_id,segments.product_title,segments.product_brand,metrics.impressions,metrics.clicks,metrics.cost_micros,metrics.conversions,metrics.conversions_value
+,PMax | Scaling | Brand excluded,MAG-120,NordVital Magnesium Bisglycinate 400mg Sleep Supplement,NordVital,40000,1000,800000000,18.5,1758.0
+,PMax | Scaling | Brand excluded,ZNC-60,NordVital Zinc Citrate 60 Capsules,NordVital,9000,150,110000000,1.0,45.0

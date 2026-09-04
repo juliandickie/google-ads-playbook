@@ -1,0 +1,4 @@
+conversion_action.id,conversion_action.name,conversion_action.category,conversion_action.type,conversion_action.status,conversion_action.primary_for_goal,conversion_action.counting_type,conversion_action.click_through_lookback_window_days,conversion_action.view_through_lookback_window_days,conversion_action.attribution_model_settings.attribution_model,conversion_action.include_in_conversions_metric,conversion_action.phone_call_duration_seconds,conversion_action.value_settings.default_value
+,Purchase,PURCHASE,WEBSITE,ENABLED,true,EVERY,30,1,DATA_DRIVEN,true,,
+,Add to cart,ADD_TO_CART,WEBSITE,ENABLED,true,EVERY,30,1,DATA_DRIVEN,true,,
+,Calls from ads,PHONE_CALL_LEAD,CALLS_FROM_ADS,ENABLED,false,ONE,30,,LAST_CLICK,false,0,

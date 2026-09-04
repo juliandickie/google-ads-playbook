@@ -1,4 +1,5 @@
 import unittest
+from gads_playbook import io
 from gads_playbook.brand import Brand, normalise_text
 
 class TextTests(unittest.TestCase):
@@ -21,6 +22,10 @@ class BrandedTests(unittest.TestCase):
     def test_from_workspace(self):
         b = Brand.from_workspace({"brand_tokens": ["Acme"]})
         self.assertTrue(b.is_branded("acme widgets"))
+    def test_from_workspace_without_brand_tokens_raises_missing_input(self):
+        with self.assertRaises(io.MissingInput) as cm:
+            Brand.from_workspace({})
+        self.assertIn("brand_tokens", str(cm.exception))
 
 class DelimiterTests(unittest.TestCase):
     def test_hyphen_delimited_token_still_matches(self):

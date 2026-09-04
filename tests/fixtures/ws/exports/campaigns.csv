@@ -1,0 +1,7 @@
+segments.date,campaign.id,campaign.name,campaign.status,campaign.advertising_channel_type,campaign.bidding_strategy_type,campaign_budget.amount_micros,metrics.impressions,metrics.clicks,metrics.cost_micros,metrics.conversions,metrics.conversions_value,metrics.search_impression_share,metrics.search_budget_lost_impression_share,metrics.search_rank_lost_impression_share
+2026-08-30,,Search | Brand | BOF | AU,ENABLED,SEARCH,TARGET_IMPRESSION_SHARE,20000000,1200,300,95400000,30.0,2700.0,0.9211,0.1,
+2026-08-30,,Search | NonBrand | BOF | Magnesium,ENABLED,SEARCH,MAXIMIZE_CONVERSIONS,150000000,8400,420,610200000,12.0,1080.0,0.41,0.385,0.205
+2026-08-30,,PMax | Scaling | Brand excluded,ENABLED,PERFORMANCE_MAX,MAXIMIZE_CONVERSION_VALUE,100000000,22000,510,402000000,9.5,903.0,,,
+2026-08-31,,Search | Brand | BOF | AU,ENABLED,SEARCH,TARGET_IMPRESSION_SHARE,20000000,1150,290,91000000,28.0,2520.0,0.93,0.1,
+2026-08-31,,Search | NonBrand | BOF | Magnesium,ENABLED,SEARCH,MAXIMIZE_CONVERSIONS,150000000,8100,400,598000000,10.0,900.0,0.402,0.39,0.208
+2026-08-31,,PMax | Scaling | Brand excluded,ENABLED,PERFORMANCE_MAX,MAXIMIZE_CONVERSION_VALUE,100000000,21500,495,399000000,9.0,855.0,,,

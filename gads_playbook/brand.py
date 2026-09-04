@@ -1,5 +1,6 @@
 """Brand-term detection and campaign classification (spec section 6.2)."""
 import re
+from . import io
 
 _PUNCT = re.compile(r"[^a-z0-9 ]+")
 _WS = re.compile(r"\s+")
@@ -18,7 +19,7 @@ class Brand:
     def from_workspace(cls, data):
         tokens = data.get("brand_tokens") or []
         if not tokens:
-            raise ValueError("gads.json has no brand_tokens. Run gads setup to record the brand name and product lines.")
+            raise io.MissingInput("gads.json has no brand_tokens. Run gads setup to record the brand name and product lines.")
         return cls(tokens)
 
     def is_branded(self, term):

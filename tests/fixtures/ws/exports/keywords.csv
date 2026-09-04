@@ -1,0 +1,3 @@
+campaign.id,campaign.name,ad_group.id,ad_group.name,ad_group_criterion.criterion_id,ad_group_criterion.keyword.text,ad_group_criterion.keyword.match_type,ad_group_criterion.status,ad_group_criterion.quality_info.quality_score,metrics.impressions,metrics.clicks,metrics.cost_micros,metrics.conversions,metrics.conversions_value
+,Search | Brand | BOF | AU,,Brand exact,,nordvital,EXACT,ENABLED,9,5000,1600,480000000,160.0,14400.0
+,Search | NonBrand | BOF | Magnesium,,Magnesium glycinate,,magnesium glycinate,PHRASE,ENABLED,7,10500,900,1200000000,42.0,3780.0
