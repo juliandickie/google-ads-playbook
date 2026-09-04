@@ -1,10 +1,12 @@
 """Detect Google Ads UI exports and map them to the canonical schema (spec section 6.1)."""
-import re, shutil
+import csv, re, shutil
 from pathlib import Path
 from . import io, schema
 
-class UnknownReport(Exception):
-    pass
+class UnknownReport(io.MissingInput):
+    """Raised when an export's title/header does not match a recognised report type.
+    A subclass of io.MissingInput so the CLI's existing error handling (message on
+    stderr, exit code 2) covers it without a separate except clause."""
 
 TITLE_PATTERNS = [
     (re.compile(r"^campaign report", re.I), "campaigns"),
@@ -150,11 +152,14 @@ def _fmt(kind, v):
         return "" if p is None else str(round(p, 6))
     return {"enum": _enum, "channel": _channel, "match": _match, "bool": _bool, "days": _days}[kind](v)
 
-def normalise_rows(report_type, rows):
+def normalise_rows(report_type, rows, header=None):
+    """Map rows (list of dicts keyed by UI column label) to the canonical schema.
+    header defaults to the keys of the first row; pass it explicitly (as normalise_file
+    does, from the parsed header line) so a header-only export with no data rows still
+    gets checked for required columns rather than silently returning []."""
     mapping = MAPPINGS[report_type]
-    if not rows:
-        return []
-    header = list(rows[0].keys())
+    if header is None:
+        header = list(rows[0].keys()) if rows else []
     resolved = {}
     for canon, (labels, kind) in mapping.items():
         for lab in labels:
@@ -165,6 +170,8 @@ def normalise_rows(report_type, rows):
     if missing:
         wanted = ["/".join(mapping[c][0]) for c in missing]
         raise io.MissingInput(f"{report_type} export is missing columns: {', '.join(wanted)}. Add them in the Google Ads column picker and export again.")
+    if not rows:
+        return []
     out = []
     for r in rows:
         first = next(iter(r.values()), "") or ""
@@ -186,7 +193,10 @@ def normalise_file(path):
     path = Path(path)
     text = io._decode(path)
     lines = text.splitlines()
-    report_type = detect_report(lines)
+    try:
+        report_type = detect_report(lines)
+    except UnknownReport as e:
+        raise UnknownReport(f"{path}: {e}") from e
     # drop title lines until the header (the first line containing a known label)
     start = 0
     labels = {lab for cols in MAPPINGS[report_type].values() for lab in cols[0]}
@@ -195,15 +205,22 @@ def normalise_file(path):
         if cells & labels:
             start = i
             break
+    header_line = lines[start] if start < len(lines) else ""
+    delim = "\t" if header_line.count("\t") > header_line.count(",") else ","
+    header = next(csv.reader([header_line], delimiter=delim), [])
     rows = io.read_csv_lines(lines[start:])
-    return report_type, normalise_rows(report_type, rows)
+    return report_type, normalise_rows(report_type, rows, header=header)
 
 def normalise_into_workspace(paths, ws):
+    """Normalise every path before writing anything: phase one parses and validates
+    every input (detect, header check, row mapping) with the workspace untouched, so
+    a failure anywhere in the batch names the failing file and leaves nothing partial
+    on disk. Phase two writes exports/<type>.csv and copies each input into raw/.
+    If two inputs resolve to the same report type, the later one (in path order) wins."""
     ws = Path(ws)
+    parsed = [(Path(p), *normalise_file(Path(p))) for p in paths]
     written = {}
-    for p in paths:
-        p = Path(p)
-        report_type, rows = normalise_file(p)
+    for p, report_type, rows in parsed:
         out = ws / "exports" / f"{report_type}.csv"
         io.write_csv(out, rows, schema.COLUMNS[report_type])
         raw = ws / "raw" / p.name

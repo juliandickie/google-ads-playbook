@@ -1,6 +1,7 @@
-import tempfile, unittest
+import shutil, tempfile, unittest
 from pathlib import Path
 from gads_playbook import normalise, io, schema
+from gads_playbook.cli import main as cli_main
 
 FIX = Path(__file__).parent / "fixtures" / "ui"
 
@@ -77,6 +78,45 @@ class FileTests(unittest.TestCase):
     def test_no_body_file_left_beside_fixture(self):
         normalise.normalise_file(FIX / "campaign_report.csv")
         self.assertFalse((FIX / "campaign_report.csv.body").exists())
+    def test_unknown_report_names_the_file(self):
+        with self.assertRaises(io.MissingInput) as cm:
+            normalise.normalise_file(FIX / "unknown_report.csv")
+        self.assertIsInstance(cm.exception, normalise.UnknownReport)
+        self.assertIn("unknown_report.csv", str(cm.exception))
+    def test_header_only_missing_column_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "headeronly_bad.csv"
+            p.write_text("Campaign report (x)\nDay,Campaign,Conversions,Conv. value\n")
+            with self.assertRaises(io.MissingInput) as cm:
+                normalise.normalise_file(p)
+            self.assertIn("Cost", str(cm.exception))
+    def test_header_only_all_required_columns_returns_empty(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "headeronly_ok.csv"
+            p.write_text("Campaign report (x)\nDay,Campaign,Cost,Conversions,Conv. value\n")
+            t, rows = normalise.normalise_file(p)
+            self.assertEqual((t, rows), ("campaigns", []))
+
+class MixedFolderTests(unittest.TestCase):
+    def test_bad_file_in_batch_leaves_workspace_untouched(self):
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "src"
+            src.mkdir()
+            shutil.copy2(FIX / "campaign_report.csv", src / "campaign_report.csv")
+            shutil.copy2(FIX / "unknown_report.csv", src / "unknown_report.csv")
+            ws = Path(d) / "ws"
+            with self.assertRaises(io.MissingInput):
+                normalise.normalise_into_workspace([src / "campaign_report.csv", src / "unknown_report.csv"], ws)
+            self.assertFalse((ws / "exports").exists() and any((ws / "exports").iterdir()))
+            self.assertFalse((ws / "raw").exists() and any((ws / "raw").iterdir()))
+
+class CliTests(unittest.TestCase):
+    def test_unknown_report_via_cli_exits_2_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d)
+            code = cli_main(["normalise", str(FIX / "unknown_report.csv"), "--workspace", str(ws)])
+            self.assertEqual(code, 2)
+            self.assertFalse((ws / "exports").exists() and any((ws / "exports").iterdir()))
 
 if __name__ == "__main__":
     unittest.main()
