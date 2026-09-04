@@ -1,4 +1,5 @@
-import argparse, os, stat, subprocess, tempfile, unittest
+import argparse, contextlib, os, stat, subprocess, tempfile, unittest
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 from gads_playbook import auth, io
@@ -55,7 +56,8 @@ class CmdAuthNormalisationTests(unittest.TestCase):
                                       developer_token="DEVTOKEN", op_ref=None)
             with mock.patch.object(auth, "CONFIG_DIR", config_dir), \
                  mock.patch.object(auth, "run_oauth", return_value=("c", "s", "r")):
-                self.assertEqual(auth.cmd_auth(args), 0)
+                with contextlib.redirect_stdout(StringIO()):
+                    self.assertEqual(auth.cmd_auth(args), 0)
             yaml_text = (config_dir / "google-ads.yaml").read_text()
             self.assertIn("login_customer_id: 1234567890", yaml_text)
             self.assertNotIn("123-456-7890", yaml_text)

@@ -38,7 +38,7 @@ def compute(terms, campaigns, min_conversions=5, win_cvr=0.20, win_share=0.02, l
         share = cost / ccost
         row = {"term": r["search_term_view.search_term"], "campaign": name, "ad_group": r.get("ad_group.name", ""),
                "match_type": r.get("segments.search_term_match_type", ""), "clicks": int(clicks), "conversions": conv, "cvr": cvr,
-               "cost": cost, "campaign_term_cost": ccost, "share": share, "value": _num(r.get("metrics.conversions_value"))}
+               "cost": cost, "campaign_basis_cost": ccost, "share": share, "value": _num(r.get("metrics.conversions_value"))}
         if cvr > win_cvr and share < win_share:
             winners.append(row)
         elif cvr < lose_cvr and share > lose_share:

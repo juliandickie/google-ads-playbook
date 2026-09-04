@@ -12,7 +12,9 @@ CAUSES = ("the developer token's access level (test-account-only tokens cannot r
 
 IMPRESSION_SHARE_FIELDS = ("metrics.search_impression_share", "metrics.search_budget_lost_impression_share",
                            "metrics.search_rank_lost_impression_share")
-SEARCH_LIKE_CHANNELS = ("SEARCH", "SHOPPING")
+# No empty-channel case here (unlike leakage.SEARCH_LIKE_CHANNELS): every row from the API carries a
+# real campaign.advertising_channel_type, so there is nothing to default it against.
+IMPRESSION_SHARE_CHANNELS = ("SEARCH", "SHOPPING")
 
 def _window_end(tz_name):
     """Yesterday in the account's own time zone (ruling R37), so a pull run just after midnight in a
@@ -85,7 +87,7 @@ def run(customer_id, login_customer_id, days, search_terms_days, ws, client=None
         rows = _rows(client, customer_id, query, schema.COLUMNS[name])
         if name == "campaigns":
             for row in rows:
-                if row.get("campaign.advertising_channel_type") not in SEARCH_LIKE_CHANNELS:
+                if row.get("campaign.advertising_channel_type") not in IMPRESSION_SHARE_CHANNELS:
                     for f in IMPRESSION_SHARE_FIELDS:
                         row[f] = ""
         results[name] = rows

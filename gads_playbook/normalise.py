@@ -110,7 +110,9 @@ def detect_report(first_lines):
             if pat.search(line.strip().strip('"')):
                 return t
     for line in first_lines[:3]:
-        cells = [c.strip().strip('"') for c in line.split(",")]
+        bare = line.rstrip("\r\n")
+        delim = io.sniff_delimiter(bare)
+        cells = [c.strip().strip('"') for c in next(csv.reader([bare], delimiter=delim), [])]
         for hint, t in HEADER_HINTS:
             if hint in cells:
                 return t
@@ -194,7 +196,10 @@ def normalise_file(path):
     if not path.exists():
         raise io.MissingInput(f"{path} does not exist. Export from the Google Ads UI and pass the file or its folder.")
     text = io._decode(path)
-    lines = text.splitlines()
+    # keepends so a quoted field's embedded newline (e.g. a two-line product title) survives into
+    # io.read_csv_lines below, matching io.read_csv; each candidate line here is title/header text only,
+    # so its own trailing newline is stripped before it is sniffed and parsed as a single row.
+    lines = text.splitlines(keepends=True)
     try:
         report_type = detect_report(lines)
     except UnknownReport as e:
@@ -203,12 +208,13 @@ def normalise_file(path):
     start = 0
     labels = {lab for cols in MAPPINGS[report_type].values() for lab in cols[0]}
     for i, line in enumerate(lines[:5]):
-        delim = io.sniff_delimiter(line)
-        cells = {c.strip().strip('"') for c in next(csv.reader([line], delimiter=delim), [])}
+        bare = line.rstrip("\r\n")
+        delim = io.sniff_delimiter(bare)
+        cells = {c.strip().strip('"') for c in next(csv.reader([bare], delimiter=delim), [])}
         if cells & labels:
             start = i
             break
-    header_line = lines[start] if start < len(lines) else ""
+    header_line = lines[start].rstrip("\r\n") if start < len(lines) else ""
     delim = io.sniff_delimiter(header_line)
     header = next(csv.reader([header_line], delimiter=delim), [])
     rows = io.read_csv_lines(lines[start:])

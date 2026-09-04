@@ -24,12 +24,14 @@ class MisallocateTests(unittest.TestCase):
         self.assertIn("best sleep supplement", losers)
         # magnesium powder has 1 conversion, under the minimum, so it appears nowhere
         self.assertNotIn("magnesium powder", winners | losers)
-    def test_share_uses_campaign_term_cost(self):
+    def test_share_uses_campaign_basis_cost(self):
         r = misallocate.compute(self.t, self.c, windows=WINDOWS)
         w = next(x for x in r["winners"] if x["term"] == "magnesium bisglycinate 400mg")
         self.assertAlmostEqual(w["share"], 29 / 2829, places=4)
         self.assertAlmostEqual(w["cvr"], 0.25)
         self.assertEqual(r["share_basis"], "term_cost")
+        self.assertEqual(w["campaign_basis_cost"], 2_829_000_000)
+        self.assertNotIn("campaign_term_cost", w)
     def test_share_uses_reported_campaign_cost_when_windows_match(self):
         # R31: with matching (or unknown) windows the denominator is the campaign's reported cost from
         # campaigns.csv (1208.2), not the term cost (2829). At the default 0.02 share threshold the term's

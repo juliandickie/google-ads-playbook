@@ -16,6 +16,11 @@ class DetectTests(unittest.TestCase):
     def test_detects_by_header_when_no_title(self):
         self.assertEqual(normalise.detect_report(["Search term,Match type,Campaign,Cost"]), "search_terms")
         self.assertEqual(normalise.detect_report(["Day,Campaign,Cost,Conversions"]), "campaigns")
+    def test_detects_by_tab_separated_header_when_no_title(self):
+        # Residual fix (2026-09-04): the header-hint fallback used to split on a bare comma, so a
+        # tab-separated export with no title line was unrecognised. It now sniffs the delimiter.
+        self.assertEqual(normalise.detect_report(["Search term\tMatch type\tCampaign\tCost"]), "search_terms")
+        self.assertEqual(normalise.detect_report(["Day\tCampaign\tCost\tConversions"]), "campaigns")
     def test_unknown_raises_with_types(self):
         with self.assertRaises(normalise.UnknownReport) as cm:
             normalise.detect_report(["Placement report (x)", "Placement,Impr."])
@@ -103,6 +108,22 @@ class FileTests(unittest.TestCase):
         with self.assertRaises(io.MissingInput) as cm:
             normalise.normalise_file(Path("/nonexistent/x.csv"))
         self.assertIn("x.csv", str(cm.exception))
+    def test_quoted_newline_in_cell_is_preserved(self):
+        # Residual fix (2026-09-04): normalise_file used text.splitlines() (no keepends), which split a
+        # quoted multi-line cell into extra bogus lines and dropped the embedded newline. It now uses
+        # splitlines(keepends=True), matching io.read_csv.
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "product_report_multiline.csv"
+            content = (
+                "Product report (x)\n"
+                "Item ID,Title,Brand,Campaign,Impr.,Clicks,Cost,Conversions,Conv. value\n"
+                'MAG-120,"NordVital Magnesium\nBisglycinate 400mg",NordVital,PMax | Scaling,100,10,10.00,1.0,50.00\n'
+            )
+            p.write_text(content)
+            t, rows = normalise.normalise_file(p)
+            self.assertEqual(t, "products")
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["segments.product_title"], "NordVital Magnesium\nBisglycinate 400mg")
     def test_tab_separated_export_normalises_correctly(self):
         # R35 (T3): io.sniff_delimiter is used for the header-line search too, so a genuinely
         # tab-separated export (with a comma inside the title line) still finds its header.

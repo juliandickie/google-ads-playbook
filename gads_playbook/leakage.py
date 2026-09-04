@@ -10,6 +10,8 @@ def _num(v):
 def _int(v):
     return int(float(v)) if (v or "") != "" else 0
 
+# Includes the empty channel: a UI export normalised by gads_playbook.normalise may have no
+# campaign.advertising_channel_type column at all, and an absent channel should still be split by search terms.
 SEARCH_LIKE_CHANNELS = ("SEARCH", "SHOPPING", "")
 SEARCH_KINDS = ("brand", "nonbrand")
 TRUE_ROAS_EXCLUDED_KINDS = ("pmax-unknown", "other-channel", "terms-only")
@@ -60,17 +62,21 @@ def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=Non
     for name, t in totals.items():
         kind = kinds.get(name, "nonbrand")
         if kind == "other-channel":
+            # No search terms classify a non-search campaign, so there is no attributable search-term
+            # gap to report; other_cost is always None here, never a misleading 0.
             per.append({"campaign": name, "kind": kind, "cost": t["cost"], "conversions": t["conversions"], "value": t["value"],
-                        "branded_cost": 0, "branded_value": 0.0, "nonbranded_cost": 0, "nonbranded_value": 0.0, "other_cost": 0})
+                        "branded_cost": 0, "branded_value": 0.0, "nonbranded_cost": 0, "nonbranded_value": 0.0, "other_cost": None})
             continue
         if kind == "terms-only":
+            # Cost, branded, and non-branded here all come from search_terms.csv itself (there is no
+            # campaigns.csv row to subtract from), so other_cost is always None, never a misleading 0.
             s = split[name]
             cost = s["branded_cost"] + s["nonbranded_cost"]
             value = s["branded_value"] + s["nonbranded_value"]
             conv = s["branded_conv"] + s["nonbranded_conv"]
             per.append({"campaign": name, "kind": kind, "cost": cost, "conversions": conv, "value": value,
                         "branded_cost": s["branded_cost"], "branded_value": s["branded_value"],
-                        "nonbranded_cost": s["nonbranded_cost"], "nonbranded_value": s["nonbranded_value"], "other_cost": 0})
+                        "nonbranded_cost": s["nonbranded_cost"], "nonbranded_value": s["nonbranded_value"], "other_cost": None})
             continue
         s = split[name]
         if kind.startswith("pmax"):
@@ -93,7 +99,8 @@ def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=Non
         assumptions.append(f"Non-search campaigns ({', '.join(other_channel_names)}) are shown separately; search terms cannot classify them.")
     terms_only_names = sorted(name for name, k in kinds.items() if k == "terms-only")
     if terms_only_names:
-        assumptions.append(f"{', '.join(terms_only_names)} appear in search terms but not in campaigns.csv (outside the campaign window or removed); excluded from the account totals.")
+        verb = "appears" if len(terms_only_names) == 1 else "appear"
+        assumptions.append(f"{', '.join(terms_only_names)} {verb} in search terms but not in campaigns.csv (outside the campaign window or removed); excluded from the account totals.")
     total_cost = sum(p["cost"] for p in per if p["kind"] != "terms-only")
     total_value = sum(p["value"] for p in per if p["kind"] != "terms-only")
     nb_camps = [p for p in per if p["kind"] in ("nonbrand", "pmax-scaling")]
@@ -133,7 +140,12 @@ def render_md(result, currency=""):
             other_rows.append({"campaign": p["campaign"], "cost": render.money(p["cost"], currency),
                                "conversions": f"{p['conversions']:.1f}", "value": f"{p['value']:,.0f}"})
             continue
-        other_display = "n/a (windows differ)" if p["other_cost"] is None else render.money(p["other_cost"], currency)
+        if p["kind"] == "terms-only":
+            # Always None (no campaigns.csv row to subtract from); a plain "n/a", not the
+            # windows-differ wording that only applies to search kinds.
+            other_display = "n/a"
+        else:
+            other_display = "n/a (windows differ)" if p["other_cost"] is None else render.money(p["other_cost"], currency)
         rows.append({"campaign": p["campaign"], "kind": p["kind"], "cost": render.money(p["cost"], currency),
                      "branded_value": f"{p['branded_value']:,.0f}", "nonbranded_value": f"{p['nonbranded_value']:,.0f}",
                      "branded_cost": render.money(p["branded_cost"], currency), "nonbranded_cost": render.money(p["nonbranded_cost"], currency),

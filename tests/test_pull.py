@@ -1,5 +1,6 @@
-import argparse, enum, json, os, sys, tempfile, types, unittest
+import argparse, contextlib, enum, json, os, sys, tempfile, types, unittest
 from datetime import date, timedelta
+from io import StringIO
 from types import SimpleNamespace as NS
 from pathlib import Path
 from unittest import mock
@@ -184,7 +185,8 @@ class CmdPullWorkspaceTests(unittest.TestCase):
         env = dict(os.environ)
         env.pop("GADS_WORKSPACE", None)
         with mock.patch.object(pull, "run", side_effect=fake_run), mock.patch.dict(os.environ, env, clear=True):
-            pull.cmd_pull(args)
+            with contextlib.redirect_stdout(StringIO()):
+                pull.cmd_pull(args)
         self.assertEqual(captured["ws"], Path.home() / "gads" / "1234567890")
 
 class MakeClientTests(unittest.TestCase):

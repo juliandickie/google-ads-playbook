@@ -145,6 +145,21 @@ class TermsOnlyTests(unittest.TestCase):
         self.assertEqual(by["Ghost"]["cost"], 900_000)
         self.assertAlmostEqual(by["Ghost"]["value"], 50.0)
         self.assertTrue(any("Ghost" in s and "not in campaigns.csv" in s for s in r_after["assumptions"]))
+    def test_terms_only_other_cost_is_none_and_assumption_is_singular(self):
+        # Residual fix (2026-09-04): a terms-only row has no campaigns.csv row to subtract from, so
+        # other_cost is always None (never a misleading 0.00), and a single ghost campaign reads
+        # "appears" (not "appear").
+        r = leakage.compute(self.c, self.t + [self.ghost_row], self.b, self.k)
+        by = {x["campaign"]: x for x in r["per_campaign"]}
+        self.assertIsNone(by["Ghost"]["other_cost"])
+        md = leakage.render_md(r, "AUD")
+        ghost_line = next(line for line in md.splitlines() if line.startswith("| Ghost |"))
+        self.assertTrue(ghost_line.rstrip().endswith("| n/a |"))
+        self.assertTrue(any("Ghost appears in search terms" in s for s in r["assumptions"]))
+    def test_multiple_terms_only_campaigns_use_plural_assumption(self):
+        second_ghost = dict(self.ghost_row, **{"campaign.name": "Ghost2", "search_term_view.search_term": "second ghost term"})
+        r = leakage.compute(self.c, self.t + [self.ghost_row, second_ghost], self.b, self.k)
+        self.assertTrue(any("Ghost, Ghost2 appear in search terms" in s for s in r["assumptions"]))
 
 class WindowMismatchOtherCostTests(unittest.TestCase):
     # R34: when the campaign and search-terms windows differ, other_cost is unknowable (not zero), so it
