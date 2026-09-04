@@ -1,0 +1,11 @@
+{
+  "brand_tokens": [
+    "NordVital"
+  ],
+  "breakeven_roas": 2.5,
+  "currency": "AUD",
+  "customer_id": "1234567890",
+  "target_roas": 4.0,
+  "window_end": "2026-08-31",
+  "window_start": "2026-07-03"
+}
