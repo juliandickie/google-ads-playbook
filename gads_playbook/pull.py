@@ -1,0 +1,97 @@
+"""Pull the canonical exports from the Google Ads API (spec section 6.8). Read-only, search_stream only, no writes to any account."""
+import os
+from datetime import date, timedelta
+from pathlib import Path
+from . import io, schema, gaql
+from .auth import CONFIG_DIR
+
+CAUSES = ("the developer token's access level (test-account-only tokens cannot read production accounts, request Basic or "
+          "Explorer access in the API Center), and the login customer id (the MCC must manage the target account, and "
+          "login_customer_id in google-ads.yaml must be the MCC)")
+
+def make_client():
+    try:
+        from google.ads.googleads.client import GoogleAdsClient
+    except ImportError as e:
+        raise io.MissingInput(
+            "the google-ads client is not installed in this interpreter. gads re-execs auth, accounts, and pull under uv "
+            "automatically unless GADS_IN_UV is set; if you are seeing this with GADS_IN_UV unset, install uv "
+            "(brew install uv); if it is set on purpose, install the google-ads package in this interpreter yourself."
+        ) from e
+    yaml = CONFIG_DIR / "google-ads.yaml"
+    if not yaml.exists():
+        raise io.MissingInput(f"{yaml} not found. Run gads auth first.")
+    return GoogleAdsClient.load_from_storage(str(yaml))
+
+def _resource_of(query):
+    return query.split("FROM")[1].split()[0]
+
+def api_error(query, e):
+    resource = _resource_of(query)
+    return io.MissingInput(f"the {resource} query failed: {e}. Likely causes: {CAUSES}.")
+
+def _rows(client, customer_id, query, fields):
+    svc = client.get_service("GoogleAdsService")
+    try:
+        batches = list(svc.search_stream(customer_id=customer_id, query=query))
+    except Exception as e:  # GoogleAdsException, transport, or auth error from the API client
+        raise api_error(query, e) from e
+    out = []
+    for batch in batches:
+        for row in batch.results:
+            out.append(gaql.flatten(row, fields))
+    return out
+
+def run(customer_id, login_customer_id, days, search_terms_days, ws, client=None):
+    """Two-phase (ruling R25). Phase one reads the customer row and every report in schema.REPORT_TYPES order, holding
+    all rows in memory; any API failure raises io.MissingInput and nothing is written. Phase two writes the six CSVs
+    and then updates gads.json."""
+    ws = Path(ws)
+    client = client or make_client()
+    end = date.today() - timedelta(days=1)
+    start = end - timedelta(days=days - 1)
+    st_start = end - timedelta(days=search_terms_days - 1)
+
+    cust = _rows(client, customer_id, gaql.render("customer", "", ""),
+                 ["customer.currency_code", "customer.time_zone", "customer.descriptive_name"])
+    if not cust:
+        raise io.MissingInput(f"customer {customer_id} returned no customer row. Check the id and that {login_customer_id} manages it.")
+
+    results = {}
+    for name in schema.REPORT_TYPES:
+        s = st_start if name == "search_terms" else start
+        query = gaql.render(name, s.isoformat(), end.isoformat())
+        results[name] = _rows(client, customer_id, query, schema.COLUMNS[name])
+
+    counts = {}
+    for name in schema.REPORT_TYPES:
+        rows = results[name]
+        io.write_csv(ws / "exports" / f"{name}.csv", rows, schema.COLUMNS[name])
+        counts[name] = len(rows)
+
+    try:
+        data = io.load_workspace(ws)
+    except io.MissingInput:
+        data = {}
+    data.update({"customer_id": customer_id, "login_customer_id": login_customer_id, "customer_name": cust[0]["customer.descriptive_name"],
+                 "currency": cust[0]["customer.currency_code"], "timezone": cust[0]["customer.time_zone"],
+                 "window_start": start.isoformat(), "window_end": end.isoformat(), "search_terms_window_start": st_start.isoformat(),
+                 "pulled_at": date.today().isoformat()})
+    io.save_workspace(ws, data)
+    return counts
+
+def cmd_pull(args):
+    from .cli import workspace_from
+    ws = workspace_from(args) if (args.workspace or os.environ.get("GADS_WORKSPACE")) else Path.home() / "gads" / args.customer
+    counts = run(args.customer.replace("-", ""), args.login_customer.replace("-", ""), args.days, args.search_terms_days, ws)
+    print("pull: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + f" -> {ws / 'exports'}")
+    return 0
+
+def register(sub, add_common):
+    p = sub.add_parser("pull", help="pull the canonical exports from the Google Ads API into the workspace")
+    p.add_argument("--customer", required=True, help="client account id, digits only")
+    p.add_argument("--login-customer", required=True, help="manager (MCC) id, digits only")
+    p.add_argument("--days", type=int, default=90)
+    p.add_argument("--search-terms-days", type=int, default=180)
+    add_common(p)
+    p.set_defaults(func=cmd_pull)

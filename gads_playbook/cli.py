@@ -5,6 +5,16 @@ from . import __version__, io, schema
 
 API_SUBCOMMANDS = {"auth", "accounts", "pull"}
 
+UV_WITH = ["google-ads>=25", "google-auth-oauthlib>=1.2", "pyyaml>=6"]
+
+def uv_command(argv):
+    root = str(Path(__file__).resolve().parents[1])
+    cmd = ["uv", "run", "--python", "3.12"]
+    for w in UV_WITH:
+        cmd += ["--with", w]
+    cmd += ["python", "-m", "gads_playbook.cli"] + list(argv)
+    return cmd, root
+
 def workspace_from(args):
     ws = getattr(args, "workspace", None) or os.environ.get("GADS_WORKSPACE")
     if not ws:
@@ -45,6 +55,14 @@ def build_parser():
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in API_SUBCOMMANDS and not os.environ.get("GADS_IN_UV"):
+        cmd, root = uv_command(argv)
+        env = dict(os.environ, GADS_IN_UV="1", PYTHONPATH=root + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""))
+        try:
+            os.execvpe(cmd[0], cmd, env)
+        except FileNotFoundError:
+            print("gads: uv is required for auth, accounts, and pull (brew install uv).", file=sys.stderr)
+            return 2
     parser, sub = build_parser()
     # later tasks register subcommands via register_all(sub)
     try:
