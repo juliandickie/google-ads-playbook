@@ -1,8 +1,17 @@
-import unittest
+import json, shutil, tempfile, unittest
 from pathlib import Path
-from gads_playbook import windows, io
+from gads_playbook import windows, io, schema, cli
 
 WS = Path(__file__).parent / "fixtures" / "ws60"
+
+def _new_campaign_rows(start_day, end_day, name="Search | NonBrand | BOF | New"):
+    rows = []
+    for day in range(start_day, end_day + 1):
+        rows.append({"segments.date": f"2026-08-{day:02d}", "campaign.id": "4", "campaign.name": name, "campaign.status": "ENABLED",
+                     "campaign.advertising_channel_type": "SEARCH", "campaign.bidding_strategy_type": "MAXIMIZE_CONVERSIONS", "campaign_budget.amount_micros": "100000000",
+                     "metrics.impressions": "1000", "metrics.clicks": "50", "metrics.cost_micros": "100000000", "metrics.conversions": "5.0", "metrics.conversions_value": "600.00",
+                     "metrics.search_impression_share": "0.5", "metrics.search_budget_lost_impression_share": "0.0", "metrics.search_rank_lost_impression_share": "0.3"})
+    return rows
 
 class WindowTests(unittest.TestCase):
     def setUp(self):
@@ -36,6 +45,50 @@ class WindowTests(unittest.TestCase):
         md = windows.render_md(r, "AUD")
         self.assertIn("scale", md)
         self.assertIn("7 days", md)
+    def test_account_rollup_rendered(self):
+        # R19: render_md must render an account section built from result["account"]["windows"],
+        # with no verdict line, using the same Window/Cost/Conv/ROAS/Prior ROAS/Delta/CPA table shape.
+        r = windows.compute(self.c, target_roas=4.0, breakeven_roas=2.5)
+        self.assertEqual(r["account"]["windows"][7]["cur"]["cost"], 2_100_000_000)  # three campaigns at 700 each
+        md = windows.render_md(r, "AUD")
+        self.assertIn("## Account", md)
+        self.assertIn("AUD 2,100.00", md)
+        account_section = md.split("## Account", 1)[1]
+        self.assertNotIn("Verdict:", account_section)
+    def test_availability_is_per_campaign(self):
+        # R20: each campaign's available window lengths come from that campaign's own earliest
+        # segments.date, not the global earliest date. A campaign with 14 days of its own history
+        # (2026-08-18 to 2026-08-31) gets the 7-day window (needs 2*7=14 total days) but not the
+        # 14-day or 30-day windows (need 28 and 60 total days respectively) -- the same
+        # (end - first).days + 1 >= 2 * L rule already used for the global "unavailable" list,
+        # just evaluated against this campaign's own rows instead of the account's earliest date.
+        new_rows = _new_campaign_rows(18, 31)
+        self.assertEqual(len(new_rows), 14)
+        rows = self.c + new_rows
+        r = windows.compute(rows, target_roas=4.0, breakeven_roas=2.5)
+        by = {c["campaign"]: c for c in r["campaigns"]}
+        new = by["Search | NonBrand | BOF | New"]
+        self.assertEqual(list(new["windows"].keys()), [7])
+        self.assertEqual(new["unavailable"], [14, 30])
+        self.assertEqual(new["verdict"], "hold")
+        self.assertTrue(any("not all windows available" in s for s in new["reasons"]))
+        winner = by["Search | NonBrand | BOF | Winner"]
+        self.assertEqual(sorted(winner["windows"].keys()), [7, 14, 30])
+        self.assertEqual(winner["verdict"], "scale")
+        self.assertEqual(winner["unavailable"], [])
+        self.assertEqual(r["unavailable"], [])  # global/account availability is unaffected
+        md = windows.render_md(r, "AUD")
+        self.assertIn("Windows unavailable for this campaign (not enough history): 14 days, 30 days.", md)
+    def test_cmd_missing_budget_lost_column_exits_2(self):
+        # R21: metrics.search_budget_lost_impression_share is a required column for `gads windows`,
+        # even though empty cell values within it are fine.
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d) / "ws"
+            shutil.copytree(WS, ws)
+            rows = io.read_csv(ws / "exports" / "campaigns.csv")
+            cols = [c for c in schema.COLUMNS["campaigns"] if c != "metrics.search_budget_lost_impression_share"]
+            io.write_csv(ws / "exports" / "campaigns.csv", rows, cols)
+            self.assertEqual(cli.main(["windows", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
 
 if __name__ == "__main__":
     unittest.main()
