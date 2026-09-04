@@ -1,8 +1,10 @@
+import json
 import unittest
 from pathlib import Path
 from gads_playbook import misallocate, io
 
 WS = Path(__file__).parent / "fixtures" / "ws"
+WINDOWS = {"window_start": "2026-06-03", "window_end": "2026-08-31", "search_terms_window_start": "2026-03-04"}
 
 class MisallocateTests(unittest.TestCase):
     def setUp(self):
@@ -34,6 +36,32 @@ class MisallocateTests(unittest.TestCase):
         md = misallocate.render_md(r, "AUD")
         self.assertIn("Underfunded winners", md)
         self.assertIn("Overfunded losers", md)
+    def test_winners_ranked_by_conversions_losers_by_cost(self):
+        r = misallocate.compute(self.t, self.c)
+        convs = [w["conversions"] for w in r["winners"]]
+        self.assertEqual(convs, sorted(convs, reverse=True))
+        costs = [l["cost"] for l in r["losers"]]
+        self.assertEqual(costs, sorted(costs, reverse=True))
+        # fixture losers have costs 1100, 900, 500 (x1,000,000 micros), so this order
+        self.assertEqual([l["term"] for l in r["losers"]],
+                         ["cheap magnesium tablets", "magnesium glycinate for sleep", "best sleep supplement"])
+    def test_coverage_uses_term_cost_and_reported_campaign_cost(self):
+        r = misallocate.compute(self.t, self.c, windows=WINDOWS)
+        cov = {c["campaign"]: c for c in r["coverage"]}
+        nb = cov["Search | NonBrand | BOF | Magnesium"]
+        self.assertEqual(nb["term_cost"], 2_829_000_000)
+        self.assertEqual(nb["campaign_cost"], 1_208_200_000)
+        br = cov["Search | Brand | BOF | AU"]
+        self.assertEqual(br["term_cost"], 498_000_000)
+        self.assertEqual(br["campaign_cost"], 186_400_000)
+    def test_render_states_denominator_ranking_and_coverage(self):
+        r = misallocate.compute(self.t, self.c, windows=WINDOWS)
+        md = misallocate.render_md(r, "AUD")
+        self.assertIn("## Coverage", md)
+        self.assertIn("ranked by conversions, losers by cost", md)
+    def test_compute_result_is_json_serializable(self):
+        r = misallocate.compute(self.t, self.c, windows=WINDOWS)
+        json.dumps(r)
 
 if __name__ == "__main__":
     unittest.main()
