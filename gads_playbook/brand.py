@@ -6,7 +6,7 @@ _WS = re.compile(r"\s+")
 NONBRAND_MARKERS = ("non-brand", "nonbrand", "non brand", "non_brand", "generic")
 
 def normalise_text(s):
-    s = _PUNCT.sub("", str(s or "").lower().replace("'", ""))
+    s = _PUNCT.sub(" ", str(s or "").lower().replace("'", ""))
     return _WS.sub(" ", s).strip()
 
 class Brand:
@@ -44,15 +44,17 @@ class Brand:
                 return "pmax-scaling"
             return "pmax-unknown"
         if keyword_rows:
-            rows = [r for r in keyword_rows if r.get("campaign.name") == name] or keyword_rows
-            total = branded = 0.0
-            for r in rows:
-                w = float(r.get("metrics.clicks") or 0) or 1.0
-                total += w
-                if self.is_branded(r.get("ad_group_criterion.keyword.text", "")):
-                    branded += w
-            if total:
-                return "brand" if branded / total > 0.5 else "nonbrand"
+            has_campaign_key = any("campaign.name" in r for r in keyword_rows)
+            rows = [r for r in keyword_rows if r.get("campaign.name") == name] if has_campaign_key else keyword_rows
+            if rows:
+                total = branded = 0.0
+                for r in rows:
+                    w = float(r.get("metrics.clicks") or 0) or 1.0
+                    total += w
+                    if self.is_branded(r.get("ad_group_criterion.keyword.text", "")):
+                        branded += w
+                if total:
+                    return "brand" if branded / total > 0.5 else "nonbrand"
         if has_nonbrand:
             return "nonbrand"
         return "brand" if has_brand else "nonbrand"

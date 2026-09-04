@@ -22,6 +22,11 @@ class BrandedTests(unittest.TestCase):
         b = Brand.from_workspace({"brand_tokens": ["Acme"]})
         self.assertTrue(b.is_branded("acme widgets"))
 
+class DelimiterTests(unittest.TestCase):
+    def test_hyphen_delimited_token_still_matches(self):
+        b = Brand(["Nord Vital"])
+        self.assertTrue(b.is_branded("nord-vital sleep"))
+
 class ClassifyTests(unittest.TestCase):
     def setUp(self):
         self.b = Brand(["NordVital"])
@@ -30,6 +35,19 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(self.b.classify_campaign("Search | NonBrand | BOF | Magnesium"), "nonbrand")
         self.assertEqual(self.b.classify_campaign("Search - Non-Brand - Generic"), "nonbrand")
         self.assertEqual(self.b.classify_campaign("Search - non brand"), "nonbrand")
+    def test_name_rules_hyphen_underscore_delimited(self):
+        self.assertEqual(self.b.classify_campaign("Search-Brand-BOF"), "brand")
+        self.assertEqual(self.b.classify_campaign("AU_Brand_Search"), "brand")
+        self.assertEqual(self.b.classify_campaign("US-NonBrand-BOF"), "nonbrand")
+        self.assertEqual(self.b.classify_campaign("Search_Non-Brand"), "nonbrand")
+    def test_keyword_rows_for_other_campaigns_fall_through_to_name_rule(self):
+        rows = [{"campaign.name": "Other Campaign", "ad_group_criterion.keyword.text": "magnesium", "metrics.clicks": "50"}]
+        self.assertEqual(self.b.classify_campaign("Search 3 - Brand", keyword_rows=rows), "brand")
+        self.assertEqual(self.b.classify_campaign("Search 3", keyword_rows=rows), "nonbrand")
+    def test_prefiltered_rows_without_campaign_name_key_are_used(self):
+        rows = [{"ad_group_criterion.keyword.text": "nordvital", "metrics.clicks": "10"},
+                {"ad_group_criterion.keyword.text": "magnesium", "metrics.clicks": "5"}]
+        self.assertEqual(self.b.classify_campaign("Whatever Name", keyword_rows=rows), "brand")
     def test_keyword_composition_over_name(self):
         rows = [{"campaign.name": "Search 1", "ad_group_criterion.keyword.text": "nordvital", "metrics.clicks": "10"},
                 {"campaign.name": "Search 1", "ad_group_criterion.keyword.text": "nordvital sleep", "metrics.clicks": "10"},
