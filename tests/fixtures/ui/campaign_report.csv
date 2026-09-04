@@ -1,0 +1,9 @@
+Campaign report (Jul 1, 2026 - Sep 1, 2026)
+Day,Campaign,Campaign state,Campaign type,Bid strategy type,Budget,Impr.,Clicks,Cost,Conversions,Conv. value,Search impr. share,Search lost IS (budget),Search lost IS (rank)
+2026-08-30,Search | Brand | BOF | AU,Enabled,Search,Target impression share,"$20.00","1,200",300,"$95.40",30.00,"$2,700.00",92.11%,< 10%,--
+2026-08-30,Search | NonBrand | BOF | Magnesium,Enabled,Search,Maximize conversions,"$150.00","8,400",420,"$610.20",12.00,"$1,080.00",41.00%,38.50%,20.50%
+2026-08-30,PMax | Scaling | Brand excluded,Enabled,Performance Max,Maximize conversion value,"$100.00","22,000",510,"$402.00",9.50,"$903.00",--,--,--
+2026-08-31,Search | Brand | BOF | AU,Enabled,Search,Target impression share,"$20.00","1,150",290,"$91.00",28.00,"$2,520.00",93.00%,< 10%,--
+2026-08-31,Search | NonBrand | BOF | Magnesium,Enabled,Search,Maximize conversions,"$150.00","8,100",400,"$598.00",10.00,"$900.00",40.20%,39.00%,20.80%
+2026-08-31,PMax | Scaling | Brand excluded,Enabled,Performance Max,Maximize conversion value,"$100.00","21,500",495,"$399.00",9.00,"$855.00",--,--,--
+Total: Account,,,,,,"62,350","2,415","$2,195.60",98.50,"$8,958.00",,,

@@ -30,6 +30,11 @@ class CsvTests(unittest.TestCase):
             q = Path(d) / "kp.csv"
             q.write_text("Keyword\tAvg. monthly searches\nmagnesium\t1,000\n", encoding="utf-16")
             self.assertEqual(io.read_csv(q), [{"Keyword": "magnesium", "Avg. monthly searches": "1,000"}])
+    def test_read_csv_lines_sniffs_delimiter_from_in_memory_lines(self):
+        lines = ["Keyword\tAvg. monthly searches", "magnesium\t1,000"]
+        self.assertEqual(io.read_csv_lines(lines), [{"Keyword": "magnesium", "Avg. monthly searches": "1,000"}])
+        lines = ["a,b", "1,x"]
+        self.assertEqual(io.read_csv_lines(lines), [{"a": "1", "b": "x"}])
     def test_require_names_missing_columns(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "c.csv"

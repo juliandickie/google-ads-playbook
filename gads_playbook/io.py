@@ -17,14 +17,19 @@ def _decode(path):
     except UnicodeDecodeError:
         return raw.decode("latin-1")
 
-def read_csv(path):
-    """Read a CSV or TSV (utf-8, utf-8-sig, or utf-16) into a list of dicts. Delimiter is sniffed from the header line."""
-    text = _decode(path)
-    lines = text.splitlines()
+def read_csv_lines(lines):
+    """Parse already-split CSV/TSV lines into a list of dicts. Delimiter is sniffed from the first line (tab if it has more tabs than commas, else comma)."""
+    lines = list(lines)
     if not lines:
         return []
     delim = "\t" if lines[0].count("\t") > lines[0].count(",") else ","
     return [dict(r) for r in csv.DictReader(lines, delimiter=delim)]
+
+def read_csv(path):
+    """Read a CSV or TSV (utf-8, utf-8-sig, or utf-16) into a list of dicts. Delimiter is sniffed from the header line."""
+    text = _decode(path)
+    lines = text.splitlines()
+    return read_csv_lines(lines)
 
 def read_header(path):
     """Return the header row of a CSV/TSV as a list of column names, or None if the file has no header line (empty or whitespace only)."""

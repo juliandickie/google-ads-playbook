@@ -1,0 +1,6 @@
+Conversion actions
+Conversion action,Category,Type,Status,Primary for goal,Counting,Click-through conversion window,View-through conversion window,Attribution model,Include in "Conversions",Call duration (seconds),Default value
+Purchase,Purchase,Website,Enabled,Yes,Every,30 days,1 day,Data-driven,Yes,,
+Add to cart,Add to cart,Website,Enabled,Yes,Every,30 days,1 day,Data-driven,Yes,,
+Calls from ads,Phone call lead,Calls from ads,Enabled,No,One,30 days,,Last click,No,0,
+Total,,,,,,,,,,,
