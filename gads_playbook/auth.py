@@ -6,15 +6,21 @@ from . import io
 CONFIG_DIR = Path(os.environ.get("GADS_CONFIG_DIR", Path.home() / ".config" / "google-ads-playbook"))
 SCOPES = ["https://www.googleapis.com/auth/adwords"]
 
+def _write_0600(path, text):
+    """Create or truncate path with mode 0600 from the first byte written (ruling R27), never a window at the umask."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+
 def write_credential_files(config_dir, client_id, client_secret, refresh_token, developer_token, login_customer_id):
     config_dir = Path(config_dir)
     config_dir.mkdir(parents=True, exist_ok=True)
     adc = config_dir / "adc.json"
-    adc.write_text(json.dumps({"client_id": client_id, "client_secret": client_secret, "refresh_token": refresh_token, "type": "authorized_user"}, indent=2) + "\n")
+    _write_0600(adc, json.dumps({"client_id": client_id, "client_secret": client_secret, "refresh_token": refresh_token, "type": "authorized_user"}, indent=2) + "\n")
     yaml = config_dir / "google-ads.yaml"
-    yaml.write_text("\n".join([f"developer_token: {developer_token}", f"client_id: {client_id}", f"client_secret: {client_secret}",
+    _write_0600(yaml, "\n".join([f"developer_token: {developer_token}", f"client_id: {client_id}", f"client_secret: {client_secret}",
                                f"refresh_token: {refresh_token}", f"login_customer_id: {login_customer_id}", "use_proto_plus: true"]) + "\n")
-    for p in (adc, yaml):
+    for p in (adc, yaml):  # explicit chmod also corrects a pre-existing file's mode
         os.chmod(p, 0o600)
     return {"adc": adc, "yaml": yaml}
 
@@ -25,8 +31,17 @@ def run_oauth(client_json):
     return creds.client_id, creds.client_secret, creds.refresh_token
 
 def _read_op(ref):
+    """Read a developer token from 1Password (ruling R26). Wraps a missing op binary, an unauthenticated
+    session, or a bad reference into io.MissingInput naming the reference and the op error text, instead of
+    letting a raw traceback escape cmd_auth."""
     import subprocess
-    return subprocess.run(["op", "read", ref], check=True, capture_output=True, text=True).stdout.strip()
+    try:
+        return subprocess.run(["op", "read", ref], check=True, capture_output=True, text=True).stdout.strip()
+    except FileNotFoundError as e:
+        raise io.MissingInput(f"op read {ref} failed: the op binary was not found. Install the 1Password CLI, sign in (op signin), or pass --developer-token.") from e
+    except subprocess.CalledProcessError as e:
+        detail = (e.stderr or str(e)).strip()
+        raise io.MissingInput(f"op read {ref} failed: {detail}. Sign in to 1Password (op signin) or pass --developer-token.") from e
 
 def cmd_auth(args):
     client_json = Path(args.client_json).expanduser()
