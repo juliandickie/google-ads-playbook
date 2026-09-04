@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "google-ads-playbook",
+  "displayName": "Google Ads Playbook",
+  "version": "0.1.0",
+  "description": "Audit and rebuild a Google Ads account with the $100M GADs playbook. Read-only. Scripts compute leakage, misallocation, feed scores, and the 7/14/30-day scaling gate; skills orchestrate; Google's official MCP answers live questions.",
+  "author": { "name": "Pro Marketing", "url": "https://promarketing.co" },
+  "license": "MIT",
+  "keywords": ["google-ads", "ppc", "performance-max", "merchant-center", "audit", "playbook"],
+  "defaultEnabled": false,
+  "userConfig": {
+    "developer_token": {
+      "type": "string",
+      "title": "Google Ads developer token",
+      "description": "From the API Center of the manager account. Stored in your OS keychain. Needs Explorer access or better to read production accounts.",
+      "sensitive": true,
+      "required": true
+    },
+    "gcp_project_id": {
+      "type": "string",
+      "title": "Google Cloud project ID",
+      "description": "The project where the Google Ads API is enabled and the OAuth desktop client was created.",
+      "required": true
+    },
+    "login_customer_id": {
+      "type": "string",
+      "title": "Manager (MCC) customer ID",
+      "description": "Ten digits, no dashes. The manager account you access client accounts through.",
+      "required": true
+    },
+    "adc_path": {
+      "type": "string",
+      "title": "Path to adc.json",
+      "description": "Written by gads auth. Absolute path, no tilde. Default /Users/<you>/.config/google-ads-playbook/adc.json",
+      "required": true
+    }
+  }
+}

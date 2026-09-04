@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+"""gads - entry point. Adds the plugin root to sys.path and dispatches to gads_playbook.cli."""
+import os, sys
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+from gads_playbook.cli import main
+sys.exit(main(sys.argv[1:]))
