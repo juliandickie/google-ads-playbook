@@ -15,7 +15,7 @@ ${CLAUDE_PLUGIN_ROOT}/bin/gads misallocate --workspace <ws>
 ${CLAUDE_PLUGIN_ROOT}/bin/gads windows --workspace <ws>
 ```
 
-Read the three markdown files in `runs/<date>/`. They are the evidence for audits 1.2, 1.4, and the scaling parts of 1.6. Do not restate their numbers from memory; quote the file. leakage.md and misallocation.md name the campaign window and the search-terms window they mix; for a window-consistent leakage read, pull with --search-terms-days equal to --days first, or read the windows line before quoting the branded share.
+Read the three markdown files in `runs/<date>/`. They are the evidence for audits 1.2, 1.4, and the scaling parts of 1.6. Do not restate their numbers from memory; quote the file. leakage.md and misallocation.md name the campaign window and the search-terms window they mix; the pull defaults keep them equal, so if the windows line says they differ, someone passed different flags, and you read that line before quoting the branded share.
 
 ## Then the six audits, in order
 

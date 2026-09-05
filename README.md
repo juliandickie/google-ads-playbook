@@ -5,7 +5,7 @@ Audit and rebuild a Google Ads account with the $100M GADs playbook, from inside
 ## What it does
 
 - `/gads precheck` - should this brand be on Google yet, and the revenue ceiling from Keyword Planner volume.
-- `/gads setup` - OAuth once, list the accounts under your MCC, pull 90 days into a per-account workspace, interview the brand kit, build the brand brain.
+- `/gads setup` - OAuth once, list the accounts under your MCC, pull 180 days into a per-account workspace, interview the brand kit, build the brand brain.
 - `/gads audit` - the six audits with real numbers: branded leakage and true new-customer ROAS, PMax constraint, spend misallocation, campaign roles, conversion tracking, feed.
 - `/gads build` - customer language, competitor angles, keyword universe, campaign architecture, RSA copy that passes a hard spec, landing page briefs.
 - `/gads feed` - the 10-point feed score and the rebuild list.
@@ -40,7 +40,7 @@ No API access? Export from the Google Ads UI and run `gads normalise`. Everythin
 
 `bin/gads` with subcommands `validate`, `normalise`, `leakage`, `misallocate`, `windows`, `feedscore`, `ceiling`, `bundle`, `auth`, `accounts`, `pull`. Stdlib Python except the last three, which run under `uv` with the Google Ads client. Every threshold is a flag; the defaults are the playbook's practitioner numbers, meant to be replaced by the account's own history after 30 days.
 
-`gads pull` defaults to 90 days of campaigns and 180 days of search terms; pass `--search-terms-days` equal to `--days` before running leakage or misallocate for a window-consistent read (both calculators say which windows they used).
+`gads pull` defaults to 180 days for both campaigns and search terms, so leakage and misallocate read one window; pass `--days` and `--search-terms-days` to change either (both calculators say which windows they used when they differ). `/gads manage` pulls 70 days on purpose, enough for the 30-versus-prior-30 gate with slack.
 
 ## Decisions baked in
 

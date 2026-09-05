@@ -189,6 +189,30 @@ class CmdPullWorkspaceTests(unittest.TestCase):
                 pull.cmd_pull(args)
         self.assertEqual(captured["ws"], Path.home() / "gads" / "1234567890")
 
+    # Search terms follow --days unless the flag is given, so the calculators read one window by default.
+    def test_search_terms_days_defaults_to_days(self):
+        captured = {}
+        def fake_run(customer_id, login_customer_id, days, search_terms_days, ws, client=None):
+            captured["days"] = (days, search_terms_days)
+            return {}
+        with tempfile.TemporaryDirectory() as d:
+            args = argparse.Namespace(customer="1234567890", login_customer="9876543210", days=120, search_terms_days=None,
+                                      workspace=d, run_date=None)
+            with mock.patch.object(pull, "run", side_effect=fake_run), contextlib.redirect_stdout(StringIO()):
+                pull.cmd_pull(args)
+            self.assertEqual(captured["days"], (120, 120))
+            args.search_terms_days = 365
+            with mock.patch.object(pull, "run", side_effect=fake_run), contextlib.redirect_stdout(StringIO()):
+                pull.cmd_pull(args)
+            self.assertEqual(captured["days"], (120, 365))
+
+    def test_parser_defaults_are_180_and_follow(self):
+        sub = argparse.ArgumentParser().add_subparsers()
+        pull.register(sub, lambda p: p.add_argument("--workspace"))
+        ns = sub.choices["pull"].parse_args(["--customer", "1", "--login-customer", "2"])
+        self.assertEqual(ns.days, 180)
+        self.assertIsNone(ns.search_terms_days)
+
 class MakeClientTests(unittest.TestCase):
     # R38: make_client wraps any exception from GoogleAdsClient.load_from_storage into io.MissingInput
     # naming the yaml path and quoting the error, instead of letting a raw client-library traceback escape.

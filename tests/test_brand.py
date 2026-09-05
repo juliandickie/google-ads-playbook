@@ -6,6 +6,23 @@ class TextTests(unittest.TestCase):
     def test_normalise_strips_punctuation_and_case(self):
         self.assertEqual(normalise_text("  NordVital's  Magnesium!  "), "nordvitals magnesium")
 
+class ShortTokenTests(unittest.TestCase):
+    def test_short_token_matches_whole_word_only(self):
+        b = Brand(["idd"])
+        self.assertTrue(b.is_branded("idd cerec course"))
+        self.assertTrue(b.is_branded("IDD"))
+        self.assertFalse(b.is_branded("bidding strategy"))
+        self.assertFalse(b.is_branded("kidding around"))
+        self.assertFalse(b.is_branded("hidden costs"))
+    def test_multi_word_token_keeps_collapsed_rule(self):
+        b = Brand(["iDD Academy"])
+        self.assertTrue(b.is_branded("iddacademy login"))
+        self.assertTrue(b.is_branded("idd academy reviews"))
+        self.assertFalse(b.is_branded("bidding academy"))
+    def test_five_letter_token_keeps_collapsed_rule(self):
+        b = Brand(["acmeco"])
+        self.assertTrue(b.is_branded("acmecowidgets"))
+
 class BrandedTests(unittest.TestCase):
     def setUp(self):
         self.b = Brand(["NordVital", "Nord Vital", "nordvitl"])

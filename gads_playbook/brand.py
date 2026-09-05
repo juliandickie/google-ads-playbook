@@ -21,7 +21,10 @@ def normalise_text(s):
 class Brand:
     def __init__(self, tokens):
         self.tokens = [normalise_text(t) for t in tokens if normalise_text(t)]
-        self.collapsed = [t.replace(" ", "") for t in self.tokens]
+        # The collapsed (no-space) rule catches "iddacademy" for "iDD Academy". Applied to a short single
+        # word it matches inside unrelated words ("idd" in "bidding"), so it is limited to multi-word tokens
+        # and tokens of five or more characters; short tokens still match as whole words.
+        self.collapsed = [t.replace(" ", "") for t in self.tokens if " " in t or len(t) >= 5]
 
     @classmethod
     def from_workspace(cls, data):

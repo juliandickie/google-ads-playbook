@@ -23,7 +23,7 @@ Check: `${CLAUDE_PLUGIN_ROOT}/bin/gads accounts --login-customer <mcc id>` lists
 
 ## Gate 2 - data
 
-Preferred: `${CLAUDE_PLUGIN_ROOT}/bin/gads pull --customer <id> --login-customer <mcc id> --workspace ~/gads/<id>` (90 days, 180 for search terms).
+Preferred: `${CLAUDE_PLUGIN_ROOT}/bin/gads pull --customer <id> --login-customer <mcc id> --workspace ~/gads/<id>` (180 days for campaigns and search terms alike; `--days` and `--search-terms-days` change them).
 
 Fallback when the API is unavailable: the operator exports from the Google Ads UI (Campaigns with the Day column, Search terms, Search keywords, Products, Conversions) and runs `${CLAUDE_PLUGIN_ROOT}/bin/gads normalise <files or folder> --workspace ~/gads/<id>`. Merchant Center or Shopify feed export goes to `<ws>/feed.tsv` as supplied.
 

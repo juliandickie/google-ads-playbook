@@ -116,7 +116,8 @@ def run(customer_id, login_customer_id, days, search_terms_days, ws, client=None
 def cmd_pull(args):
     from .cli import workspace_from
     ws = workspace_from(args) if (args.workspace or os.environ.get("GADS_WORKSPACE")) else Path.home() / "gads" / args.customer.replace("-", "")
-    counts = run(args.customer.replace("-", ""), args.login_customer.replace("-", ""), args.days, args.search_terms_days, ws)
+    search_terms_days = args.search_terms_days if args.search_terms_days is not None else args.days
+    counts = run(args.customer.replace("-", ""), args.login_customer.replace("-", ""), args.days, search_terms_days, ws)
     print("pull: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + f" -> {ws / 'exports'}")
     return 0
 
@@ -124,7 +125,7 @@ def register(sub, add_common):
     p = sub.add_parser("pull", help="pull the canonical exports from the Google Ads API into the workspace")
     p.add_argument("--customer", required=True, help="client account id, digits only")
     p.add_argument("--login-customer", required=True, help="manager (MCC) id, digits only")
-    p.add_argument("--days", type=int, default=90)
-    p.add_argument("--search-terms-days", type=int, default=180)
+    p.add_argument("--days", type=int, default=180, help="campaign window in days ending yesterday in the account time zone (default 180)")
+    p.add_argument("--search-terms-days", type=int, default=None, help="search terms window in days; defaults to --days so leakage and misallocate read one window")
     add_common(p)
     p.set_defaults(func=cmd_pull)
