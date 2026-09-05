@@ -46,7 +46,7 @@ Two PMax campaigns (brand-allowed capture, brand-excluded scaling). Non-branded 
 - pro-marketing-ads `/ads audit` for the full scored 80-check pass. The checklist itself is in `references/06`.
 - Copy School `voc-research` for customer language mining and `10x-landing-pages` for landing page briefs, when installed.
 - creators-studio `/create-image` and `/create-video` for creative generation.
-- The bundled `google-ads` MCP for live questions (`search` with GAQL, `list_accessible_customers`). Prefer `gads pull` for anything a calculator will consume.
+- The bundled `google-ads` MCP for live questions. Its tools are `customers_list_accessible_customers`, `search_search` (structured: customer_id, fields, resource, conditions, orderings, limit; not a GAQL string), and `metadata_get_resource_metadata`. Prefer `gads pull` for anything a calculator will consume.
 
 ## Where things are
 
