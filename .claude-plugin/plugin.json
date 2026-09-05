@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "google-ads-playbook",
   "displayName": "Google Ads Playbook",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Audit and rebuild a Google Ads account with the $100M GADs playbook. Read-only. Scripts compute leakage, misallocation, feed scores, and the 7/14/30-day scaling gate; skills orchestrate; Google's official MCP answers live questions.",
   "author": { "name": "Pro Marketing", "url": "https://promarketing.co" },
   "license": "MIT",
