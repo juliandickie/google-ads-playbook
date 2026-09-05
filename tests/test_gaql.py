@@ -33,4 +33,6 @@ class UvTests(unittest.TestCase):
         self.assertEqual(cmd[:4], ["uv", "run", "--python", "3.12"])
         self.assertIn("google-ads>=25", cmd)
         self.assertEqual(cmd[-3:], ["pull", "--customer", "1"])
-        self.assertTrue(root.endswith("google-ads-playbook"))
+        # the root is the checkout, whatever the folder is called (clones and the plugin cache use other names)
+        self.assertTrue((pathlib.Path(root) / "gads_playbook" / "cli.py").is_file(), root)
+        self.assertTrue((pathlib.Path(root) / "bin" / "gads").is_file(), root)
