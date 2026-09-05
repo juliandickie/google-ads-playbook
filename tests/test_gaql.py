@@ -1,4 +1,4 @@
-import enum, unittest
+import enum, pathlib, unittest
 from types import SimpleNamespace as NS
 from gads_playbook import gaql, schema
 
