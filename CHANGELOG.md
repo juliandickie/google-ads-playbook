@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 - 2026-09-06
+
+- gads-audit 1.1 diagnoses a zero GA4 import by attribution (all-Direct purchases on a hosted checkout domain mean missing cross-domain measurement) and retires actions imported from dead properties.
+
 ## 0.1.2 - 2026-09-05
 
 - gads-audit 1.1 reconciles against the attribution tool and the cart (counts, leads, value) and checks currency conversion in both directions when the account currency differs from the cart's.
