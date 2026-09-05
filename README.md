@@ -20,7 +20,7 @@ Audit and rebuild a Google Ads account with the $100M GADs playbook, from inside
 /plugin install google-ads-playbook@google-ads-playbook
 ```
 
-Also listed in the outfit and loadout catalogs. Requires Python 3.12+, `uv`, and `pipx` (for the bundled Google Ads MCP server).
+Or from the outfit or loadout catalogs once added: `/plugin install google-ads-playbook@outfit`. The plugin installs disabled; enable it and set its four config values (`/plugin configure google-ads-playbook@outfit`) after the Setup steps below. Requires Python 3.12+, `uv`, and `pipx` (for the bundled Google Ads MCP server).
 
 ## Setup
 

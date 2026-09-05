@@ -46,9 +46,11 @@ Behaviour that differs from the original plan text, decided during the subagent-
 - Residuals from the final review closed on 2026-09-04: terms-only and other-channel rows show n/a for unattributed cost; misallocate rows carry campaign_basis_cost; pull's channel set renamed IMPRESSION_SHARE_CHANNELS; normalise keeps quoted newlines and recognises tab exports without a title line; test output is pristine.
 - auth writes quota_project_id into adc.json from the OAuth client JSON's project_id (override with --gcp-project) so ADC consumers such as the bundled MCP have a quota project.
 
-## State at the end of the smoke test session (2026-09-05)
+## State at the end of the smoke test and publish session (2026-09-05)
 
-The live smoke test passed (section above). HEAD is on main; 141 tests pass; strict validation passes; `.mcp.json` is pinned. The in-host MCP start (plugin installed through a marketplace, four userConfig values set, server started by Claude Code itself) is the one step not yet exercised. Next: publish, install from the catalog, set the config, run the first real `/gads audit`.
+The live smoke test passed (section above). The repository is public at https://github.com/juliandickie/google-ads-playbook (main, pushed 2026-09-05) and listed in the outfit and loadout catalogs; `claude plugin install google-ads-playbook@outfit` installs 0.1.0 into the plugin cache, disabled by default with the four userConfig values unset. Before the first push the history was rewritten so no client account record ever appears in it (the tracked DEVELOPMENT.md was dropped from every earlier commit and re-added scrubbed; a GCP project id, a 1Password item path, and a brand name in tests and help text were replaced in place). 141 tests pass; strict validation passes; `.mcp.json` is pinned. Still not exercised: the in-host MCP start (enable the plugin, set the four values with `/plugin configure google-ads-playbook@outfit`, start a fresh terminal session, call customers_list_accessible_customers). Next after that: the first real `/gads audit`.
+
+Publishing rule for this repo: account-specific material (customer ids, manager ids, GCP project ids, campaign names, spend and conversion figures, vault paths) never goes into a tracked file. Keep it under `docs/` (gitignored) and write generic notes here.
 
 ## State at the end of the build session (2026-09-04)
 
