@@ -1,13 +1,13 @@
 {
   "name": "google-ads-playbook",
   "owner": { "name": "Julian Dickie", "email": "julian@instituteofdigitaldentistry.com", "url": "https://github.com/juliandickie" },
-  "metadata": { "description": "Single-plugin marketplace for google-ads-playbook.", "version": "0.1.1" },
+  "metadata": { "description": "Single-plugin marketplace for google-ads-playbook.", "version": "0.1.2" },
   "plugins": [
     {
       "name": "google-ads-playbook",
       "source": "./",
       "description": "Audit and rebuild a Google Ads account with the $100M GADs playbook. Read-only. Scripts compute the numbers, skills orchestrate, Google's official MCP answers live questions.",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "author": { "name": "Julian Dickie", "email": "julian@instituteofdigitaldentistry.com", "url": "https://github.com/juliandickie" },
       "homepage": "https://github.com/juliandickie/google-ads-playbook",
       "repository": "https://github.com/juliandickie/google-ads-playbook",

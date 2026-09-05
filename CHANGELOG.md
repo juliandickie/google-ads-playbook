@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2 - 2026-09-05
+
+- gads-audit 1.1 reconciles against the attribution tool and the cart (counts, leads, value) and checks currency conversion in both directions when the account currency differs from the cart's.
+
 ## 0.1.1 - 2026-09-05
 
 - `.mcp.json` pins google-ads-mcp to commit 88f0467b9e536c562941fa52a94dd02b193c8fa4 after the live smoke test.
