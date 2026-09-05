@@ -15,6 +15,8 @@ ${CLAUDE_PLUGIN_ROOT}/bin/gads leakage --workspace <ws>
 
 (70 days for both so the 30-versus-prior-30 window survives a quiet first day and the leakage read uses one window. Use `normalise` on fresh UI exports when the API is unavailable.)
 
+Once a month, or when a competitor is suspected of bidding on the brand, rerun the brand SERP check from the `gads` skill and compare with the previous `brand-serp.md`: a phrase that moved from no bid to protect (a competitor ad appeared, or the organic rank slipped) is the one change this skill may recommend outside the scaling gate, as a draft brand campaign for that phrase and country.
+
 ## 4.1 Daily audit
 
 Prompt 4.1 from `references/10-prompts.md` Part 4 with `windows.md` as the 7-day evidence and `leakage.md` for branded leakage. Flags from `02`: ROAS down 20 percent or more, CPA up 20 percent or more, budget-limited winners (the budget-limited line in windows.md), rank-limited campaigns, wasted-spend queries, products spending with zero conversions (products.csv). Then the action-list follow-up in the contract's recommendation format.

@@ -19,7 +19,7 @@ Prompt 2.2 with Ads Transparency Center and Meta Ad Library as sources, then the
 
 ## 2.3 Keyword universe
 
-Prompt 2.3, then the 30-day prioritisation. Cross-check the universe against `exports/search_terms.csv`: any converting term the universe missed goes in. Every keyword carries funnel stage, intent, match type, campaign and ad group, landing page angle. Save as `<ws>/build/keywords.md`.
+Prompt 2.3, then the 30-day prioritisation. Cross-check the universe against `exports/search_terms.csv`: any converting term the universe missed goes in. Brand terms enter the universe only where `runs/<date>/brand-serp.md` says protect (run the brand SERP check from the `gads` skill first if the file is missing or older than a month); every other brand term is listed under "not bid, organic rank one" so the omission is visible. Every keyword carries funnel stage, intent, match type, campaign and ad group, landing page angle. Save as `<ws>/build/keywords.md`.
 
 ## 2.4 Campaign architecture
 
