@@ -57,6 +57,14 @@ Publishing rule for this repo: account-specific material (customer ids, manager 
 
 Tasks 1 to 13 of the plan plus the whole-branch final review and its fix wave are committed on main; 132 tests pass; strict validation passes. Nothing has run against a real account. The session handoff with every ruling lives in `docs/` (local only). The two catalog repos (`~/code/plugins`, `~/code/ai-loadout`) hold the marketplace entry and README row staged, not committed.
 
+## Lessons from the first real audit (2026-09-05, generic)
+
+- Marketplace updates are version-gated. `claude plugin update` reports "already at the latest version" until `.claude-plugin/plugin.json` and `marketplace.json` carry a new version, whatever main holds. Bump the version with every change that should reach installed copies.
+- The exports do not carry settings. The first audit needed campaign network and geo settings, criteria, shared negative lists, ads with strength and policy topics, assets, audiences, conversion goals, quality components, landing pages, device and geo splits, and change events; all came from the bundled MCP's `search_search` over stdio and were saved under the workspace `raw/`. Candidate feature: `gads pull --deep` writing those as JSON so the audit skill can cite them.
+- GAQL through `search_search`: `DURING LAST_90_DAYS` is rejected (LAST_30_DAYS works; use `segments.date BETWEEN 'YYYY-MM-DD' AND 'YYYY-MM-DD'` for anything else); `campaign_asset` and `ad_group_asset` need `campaign.status` in the field list when it is filtered; `change_event` needs a BETWEEN range of 30 days or less; `conversion_action` reports `metrics.all_conversions`, not `metrics.conversions`; `campaign.start_date` is not selectable. Rows come back with flat dotted keys (`campaign.name`), and nested RSA headline objects carry enum ints.
+- The biggest finding was in a per-action volume query, not in the exports: which conversion actions actually fired in the window. `conversion_actions.csv` shows configuration only; add `metrics.all_conversions` per action to the pull or the deep pass.
+- A conversion audit needs the biddable goal categories (`customer_conversion_goal`, `campaign_conversion_goal`) beside `primary_for_goal`; a primary page-view action in a non-biddable category does nothing, a primary signup in a biddable one drives every Maximize Conversions campaign.
+
 ## Known gaps
 
 - The collapsed-form brand rule (spec 6.2) now applies only to multi-word tokens and tokens of five or more characters (decided 2026-09-05); short tokens match as whole words only, so a three-letter acronym no longer matches inside unrelated words.
