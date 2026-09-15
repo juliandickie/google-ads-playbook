@@ -42,6 +42,8 @@ No API access? Export from the Google Ads UI and run `gads normalise`. Everythin
 
 `gads pull` defaults to 180 days for both campaigns and search terms, so leakage and misallocate read one window; pass `--days` and `--search-terms-days` to change either (both calculators say which windows they used when they differ). `/gads manage` pulls 70 days on purpose, enough for the 30-versus-prior-30 gate with slack.
 
+`gads pull --deep` adds the settings deep pass the audit needs and the exports cannot carry: 25 read-only queries, one JSON file each under `raw/deep-<date>/` with a manifest (campaign settings and criteria, negatives, ads and policy topics, assets, audiences, conversion goals and per-action conversion volumes, keyword quality, landing pages, device and geo splits, 28 days of change events). `--deep-only` reruns just that pass. A query the API rejects writes `<name>.error.txt` beside the others and the pass continues.
+
 ## Decisions baked in
 
 Two PMax campaigns (capture and scaling). Non-branded search in Phase 2. Feed descriptions toward 5,000 characters. Scale 20-30 percent every 48-72 hours only when the 7, 14, and 30-day windows agree. They live in `references/02-google-ads-architecture.md`; change them there.

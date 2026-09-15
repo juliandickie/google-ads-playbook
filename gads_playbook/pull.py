@@ -116,9 +116,17 @@ def run(customer_id, login_customer_id, days, search_terms_days, ws, client=None
 def cmd_pull(args):
     from .cli import workspace_from
     ws = workspace_from(args) if (args.workspace or os.environ.get("GADS_WORKSPACE")) else Path.home() / "gads" / args.customer.replace("-", "")
+    customer_id = args.customer.replace("-", "")
     search_terms_days = args.search_terms_days if args.search_terms_days is not None else args.days
-    counts = run(args.customer.replace("-", ""), args.login_customer.replace("-", ""), args.days, search_terms_days, ws)
-    print("pull: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + f" -> {ws / 'exports'}")
+    if not getattr(args, "deep_only", False):
+        counts = run(customer_id, args.login_customer.replace("-", ""), args.days, search_terms_days, ws)
+        print("pull: " + ", ".join(f"{k} {v}" for k, v in counts.items()) + f" -> {ws / 'exports'}")
+    if getattr(args, "deep", False) or getattr(args, "deep_only", False):
+        from . import deep
+        manifest = deep.run(customer_id, ws, run_date=getattr(args, "run_date", None))
+        line, failed = deep.summary(manifest, ws)
+        print(line)
+        return 1 if failed else 0
     return 0
 
 def register(sub, add_common):
@@ -127,5 +135,7 @@ def register(sub, add_common):
     p.add_argument("--login-customer", required=True, help="manager (MCC) id, digits only")
     p.add_argument("--days", type=int, default=180, help="campaign window in days ending yesterday in the account time zone (default 180)")
     p.add_argument("--search-terms-days", type=int, default=None, help="search terms window in days; defaults to --days so leakage and misallocate read one window")
+    p.add_argument("--deep", action="store_true", help="after the exports, run the settings deep pass: one JSON per query under raw/deep-<date>/ (settings, criteria, negatives, ads, assets, audiences, conversion goals and per-action volumes, quality, landing pages, device and geo splits, change events)")
+    p.add_argument("--deep-only", action="store_true", help="run the settings deep pass only, keeping the current exports")
     add_common(p)
     p.set_defaults(func=cmd_pull)

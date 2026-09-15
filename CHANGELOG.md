@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4 - 2026-09-15
+
+- `gads pull --deep` runs the settings deep pass after the exports (`--deep-only` runs it alone): 25 read-only queries written as one JSON file each under `raw/deep-<date>/` with a `manifest.json`, covering campaign settings and criteria, shared and ad-group negatives, ads with policy topics, assets, audiences and user lists, conversion goals, conversion actions with per-action volumes and a per-campaign per-action split, keyword quality components, landing pages, device and geo splits, and 28 days of change events. Enums are written by name. A query the API rejects writes `<name>.error.txt` and the pass carries on; the stdout line names every failure and the exit code is 1 when any query failed.
+- gads-audit cites the deep pass files as evidence and writes the report one line per recommendation field, checklist control and sub-point.
+- gads-audit's currency check can be settled from data: match a few cart orders against the values the account recorded by click date.
 ## 0.1.3 - 2026-09-06
 
 - gads-audit 1.1 diagnoses a zero GA4 import by attribution (all-Direct purchases on a hosted checkout domain mean missing cross-domain measurement) and retires actions imported from dead properties.
