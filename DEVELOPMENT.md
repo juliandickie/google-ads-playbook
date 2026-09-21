@@ -66,6 +66,8 @@ Plugin 0.1.3, public, installed from the outfit catalog and enabled. The first r
 
 The live smoke test passed (section above). The repository is public at https://github.com/juliandickie/google-ads-playbook (main, pushed 2026-09-05) and listed in the outfit and loadout catalogs; `claude plugin install google-ads-playbook@outfit` installs 0.1.0 into the plugin cache, disabled by default with the four userConfig values unset. Before the first push the history was rewritten so no client account record ever appears in it (the tracked DEVELOPMENT.md was dropped from every earlier commit and re-added scrubbed; a GCP project id, a 1Password item path, and a brand name in tests and help text were replaced in place). 141 tests pass; strict validation passes; `.mcp.json` is pinned. Still not exercised: the in-host MCP start (enable the plugin, set the four values with `/plugin configure google-ads-playbook@outfit`, start a fresh terminal session, call customers_list_accessible_customers). Next after that: the first real `/gads audit`.
 
+Release rule for this repo (Julian, 2026-09-22): every version bump is tagged `v<version>` on the commit that carries it and the tag pushed with the commit; plugin.json, marketplace.json and `gads_playbook/__init__.py` move together. v0.2.0 and v0.2.1 were the first.
+
 Publishing rule for this repo: account-specific material (customer ids, manager ids, GCP project ids, campaign names, spend and conversion figures, vault paths) never goes into a tracked file. Keep it under `docs/` (gitignored) and write generic notes here.
 
 ## State at the end of the build session (2026-09-04)
