@@ -2,7 +2,9 @@
 calculator runs, the settings deep pass, the brand SERP check, the reconciliation), with rule-drafted
 recommendations for the gads-audit skill to review. Every source is optional; a missing one becomes a
 named gap in the report and a "no evidence" verdict on the controls it would have decided. Writes
-runs/<date>/audit.md (the document layout), audit.json, and audit-executive.md on request. Read-only."""
+runs/<date>/audit.md (the document layout), audit.json, and audit-executive.md on request. The reviewer's
+additions, edits and drops live in runs/<date>/audit-review.md and are merged on every run, so a rerun never
+loses them. Read-only."""
 import json, re
 from collections import defaultdict
 from datetime import date
@@ -185,6 +187,9 @@ class Report:
         self.controls = {}                    # id -> (verdict, note)
         self.headline = {}                    # numbers the executive version reuses
         self.campaigns = []                   # per-campaign role blocks [(name, [(label, text)])]
+        self.caveats = []                     # reviewer caveats [(label, text)]
+        self.review_notes = []                # what the review merge could not place
+        self.review = None
 
     def add(self, section, label, text):
         self.sections[section].append((label, text))
@@ -815,6 +820,115 @@ def _same_product(a, b):
     wb = {w.lower() for w in re.findall(r"[A-Za-z]{5,}", b)} - stop
     return bool(wa & wb)
 
+# ---------------------------------------------------------------- reviewed additions
+
+REVIEW_FILE = "audit-review.md"
+REC_TOKEN = re.compile(r"\{rec:([^}]+)\}")
+
+def load_review(run_dir):
+    """runs/<date>/audit-review.md, the reviewer's file. Blocks start with a level-two heading:
+    `## Recommendation - <title>` (fields as **Label:** lines; optional **Section:** tracking|leakage|pmax|
+    misallocation|feed|roles and **After:** <generated title prefix>), `## Campaign - <name>` (labelled
+    lines merged into that campaign's block; Job goes first, the rest after Signal), `## Override - <generated
+    title prefix>` (fields that replace the draft's, or **Drop:** yes to remove it), `## Caveat` (labelled
+    lines appended to Caveats). `{rec:<title prefix>}` anywhere resolves to that recommendation's number
+    after numbering. Returns None when the file is absent."""
+    p = Path(run_dir) / REVIEW_FILE
+    if not p.exists():
+        return None
+    review = {"recs": [], "campaigns": defaultdict(list), "overrides": [], "caveats": [], "path": p}
+    kind, name, fields = None, None, []
+    def flush():
+        if kind == "Recommendation":
+            f = dict(fields)
+            review["recs"].append({"title": name, "section": f.pop("Section", "roles"), "after": f.pop("After", None), "fields": f})
+        elif kind == "Campaign":
+            review["campaigns"][name].extend(fields)
+        elif kind == "Override":
+            review["overrides"].append({"title": name, "fields": dict(fields)})
+        elif kind == "Caveat":
+            review["caveats"].extend(fields)
+    for line in p.read_text().splitlines():
+        m = re.match(r"^## (Recommendation|Campaign|Override|Caveat)(?: - (.+))?$", line)
+        if m:
+            flush()
+            kind, name, fields = m.group(1), (m.group(2) or "").strip(), []
+            continue
+        f = re.match(r"^\*\*([^*]+):\*\* ?(.*)$", line)
+        if f and kind:
+            fields.append((f.group(1).strip(), f.group(2).strip()))
+        elif kind and fields and line.strip() and not line.startswith("#"):
+            fields[-1] = (fields[-1][0], (fields[-1][1] + " " + line.strip()).strip())
+    flush()
+    return review
+
+def apply_review(rep, review):
+    """Overrides and drops first, then the reviewer's recommendations in position, then campaign lines and caveats."""
+    if not review:
+        return
+    for o in review["overrides"]:
+        target = next((r for r in rep.recs if r["title"].lower().startswith(o["title"].lower())), None)
+        if not target:
+            rep.review_notes.append(f"override for \"{o['title']}\" matched no drafted recommendation")
+            continue
+        if str(o["fields"].get("Drop", "")).lower() in ("yes", "true"):
+            rep.recs.remove(target)
+            rep.review_notes.append(f"dropped the draft \"{target['title']}\"")
+            continue
+        for k, v in o["fields"].items():
+            if k in FIELD_ORDER or k == "title":
+                target[k] = v
+        target["reviewed"] = "edited"
+    for r in review["recs"]:
+        rec = {"section": r["section"], "title": r["title"], "reviewed": "added"}
+        for k in FIELD_ORDER:
+            rec[k] = r["fields"].get(k, "")
+        rec["Owner"] = rec["Owner"] or OWNER
+        rec["Approval"] = rec["Approval"] or DRAFT
+        pos = len(rep.recs)
+        if r["after"]:
+            for i, x in enumerate(rep.recs):
+                if x["title"].lower().startswith(r["after"].lower()):
+                    pos = i + 1
+                    break
+        else:
+            same = [i for i, x in enumerate(rep.recs) if x["section"] == r["section"]]
+            pos = (same[-1] + 1) if same else len(rep.recs)
+        rep.recs.insert(pos, rec)
+    for name, lines in review["campaigns"].items():
+        block = next((b for b in rep.campaigns if b[0] == name), None)
+        if not block:
+            rep.review_notes.append(f"campaign lines for \"{name}\" matched no enabled campaign")
+            continue
+        existing = block[1]
+        first = [l for l in lines if l[0] == "Job"]
+        rest = [l for l in lines if l[0] != "Job"]
+        sig = next((i for i, (lab, _) in enumerate(existing) if lab == "Signal"), -1)
+        for l in reversed(first):
+            existing.insert(0, l)
+        insert_at = (sig + 1 + len(first)) if sig >= 0 else len(existing)
+        for l in reversed(rest):
+            existing.insert(insert_at, l)
+    rep.caveats.extend(review["caveats"])
+
+def resolve_tokens(rep):
+    """{rec:<title prefix>} -> the number of the first recommendation whose title starts with that text."""
+    def sub(text):
+        def repl(m):
+            key = m.group(1).strip().lower()
+            for r in rep.recs:
+                if r["title"].lower().startswith(key):
+                    return str(r["number"])
+            rep.review_notes.append(f"{{rec:{m.group(1)}}} matched no recommendation")
+            return m.group(0)
+        return REC_TOKEN.sub(repl, text) if isinstance(text, str) else text
+    for r in rep.recs:
+        for k in FIELD_ORDER + ["title"]:
+            r[k] = sub(r.get(k, ""))
+    rep.campaigns = [(n, [(l, sub(t)) for l, t in lines]) for n, lines in rep.campaigns]
+    rep.caveats = [(l, sub(t)) for l, t in rep.caveats]
+    rep.sections = defaultdict(list, {k: [(l, sub(t)) for l, t in v] for k, v in rep.sections.items()})
+
 # ---------------------------------------------------------------- composition
 
 def build(ev):
@@ -828,8 +942,12 @@ def build(ev):
     rule_roles(rep, totals)
     order = ["tracking", "leakage", "pmax", "misallocation", "feed", "roles"]
     rep.recs.sort(key=lambda r: order.index(r["section"]))
+    rep.review = load_review(ev.run_dir)
+    apply_review(rep, rep.review)
+    rep.recs.sort(key=lambda r: order.index(r["section"]))
     for i, r in enumerate(rep.recs, 1):
         r["number"] = i
+    resolve_tokens(rep)
     return rep
 
 SECTION_TITLES = {"tracking": "1. Conversion tracking (audit 1.1)", "leakage": "2. Branded leakage (audit 1.2)", "pmax": "3. PMax constraint (audit 1.3)",
@@ -895,6 +1013,8 @@ def render_audit(rep):
             for f in FIELD_ORDER:
                 if r.get(f):
                     L += [f"**{f}:** {r[f]}", ""]
+            if r.get("reviewed"):
+                L += [f"**Reviewed:** {'added by the reviewer' if r['reviewed'] == 'added' else 'edited by the reviewer'} in {REVIEW_FILE}.", ""]
     L += ["## The three changes that move new-customer ROAS most, in order", ""]
     for i, r in enumerate(three_changes(rep), 1):
         L += [f"**{('First', 'Second', 'Third')[i - 1]}, recommendation {r['number']} ({r['title']}):** {r['Change']}", ""]
@@ -911,8 +1031,13 @@ def render_audit(rep):
     else:
         for cid, (verdict, note) in sorted(rep.controls.items()):
             L += [f"**{cid}:** {verdict} ({note}).", ""]
-    L += ["## Caveats", "",
-          "**Drafts:** every recommendation above was drafted by rule from the files; the account manager reviews the judgement (the Change, Risk and Impact lines) before anything is applied or shown to the client.", ""]
+    L += ["## Caveats", ""]
+    for label, text in rep.caveats:
+        L += [f"**{label}:** {text}", ""]
+    if rep.review:
+        added = [r for r in rep.recs if r.get("reviewed") == "added"]; edited = [r for r in rep.recs if r.get("reviewed") == "edited"]
+        L += [f"**Reviewed:** {len(added)} recommendation{'s' if len(added) != 1 else ''} added and {len(edited)} edited from {ev.link(ev.rel(rep.review['path']))}; the generated drafts are the rest." + (" Could not place: " + "; ".join(rep.review_notes) + "." if rep.review_notes else ""), ""]
+    L += ["**Drafts:** every recommendation not marked reviewed was drafted by rule from the files; the account manager reviews the judgement (the Change, Risk and Impact lines) before anything is applied or shown to the client. Review edits belong in " + REVIEW_FILE + ", never in this file, which every run rewrites.", ""]
     if ev.leakage:
         L += [f"**Floors:** {' '.join(ev.leakage.get('assumptions', []))}", ""]
     L += ["**Snapshot:** the settings and the SERP verdicts are reads on the run date; anything changed after that is not reflected.", ""]
@@ -961,7 +1086,8 @@ def to_json(rep):
             "used": rep.ev.used, "missing": [{"source": s, "why": w} for s, w in rep.ev.missing], "headline": rep.headline,
             "sections": {k: [{"label": l, "text": t} for l, t in v] for k, v in rep.sections.items()},
             "campaigns": [{"campaign": n, "lines": [{"label": l, "text": t} for l, t in ls]} for n, ls in rep.campaigns],
-            "recommendations": rep.recs, "controls": {k: {"verdict": v, "note": n} for k, (v, n) in rep.controls.items()}}
+            "recommendations": rep.recs, "controls": {k: {"verdict": v, "note": n} for k, (v, n) in rep.controls.items()},
+            "review": {"file": rep.ev.rel(rep.review["path"]) if rep.review else None, "notes": rep.review_notes, "caveats": [{"label": l, "text": t} for l, t in rep.caveats]}}
 
 def run(ws, run_date=None, deep=None, executive=False):
     ev = Evidence(ws, run_date, deep)
@@ -981,7 +1107,8 @@ def cmd_audit(args):
     for v, _ in rep.controls.values():
         verdicts[v] += 1
     print(f"audit: {len(rep.recs)} draft recommendations, controls " + ", ".join(f"{n} {v}" for v, n in sorted(verdicts.items(), key=lambda x: -x[1]))
-          + f", {len(rep.ev.missing)} missing sources -> {out / 'audit.md'}" + (f" and audit-executive.md" if args.executive else ""))
+          + f", {len(rep.ev.missing)} missing sources" + (f", review merged ({sum(1 for r in rep.recs if r.get('reviewed'))} reviewed)" if rep.review else "")
+          + (f", UNPLACED: {'; '.join(rep.review_notes)}" if rep.review_notes else "") + f" -> {out / 'audit.md'}" + (f" and audit-executive.md" if args.executive else ""))
     return 0
 
 def register(sub, add_common):

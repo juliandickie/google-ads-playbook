@@ -206,6 +206,132 @@ class FullEvidenceTests(unittest.TestCase):
         self.assertIn("G47", j["controls"])
         self.assertTrue(any(m["source"].endswith("geo_90d.error.txt") for m in j["missing"]))
 
+REVIEW = """# Reviewed additions
+
+## Recommendation - Competitor names decided
+
+**Section:** misallocation
+
+**After:** A fortnightly negative pass
+
+**Campaign:** all enabled
+
+**Issue:** competitor names bought without a decision; see recommendation {rec:"Generic negatives} for the list mechanics.
+
+**Evidence:** search_terms.csv
+
+**Rule:** 06 G14
+
+**Confidence:** medium
+
+**Change:** negatives for the names that never convert.
+
+**Risk:** low.
+
+**Impact:** cleaner data.
+
+**Rollback:** remove.
+
+**Window:** 30 days.
+
+## Recommendation - A landing page call
+
+**Section:** roles
+
+**Campaign:** Search | Widgets | AU
+
+**Issue:** the homepage takes spend.
+
+**Change:** point the ad group at the widgets page.
+
+## Override - Search Partners on one campaign
+
+**Drop:** yes
+
+## Override - Rebuild the Poor-strength ads
+
+**Confidence:** medium
+
+**Risk:** the client writes its own ads; two weeks of their time.
+
+## Campaign - Search | Widgets | AU
+
+**Job:** non-brand acquisition, widgets, Australia.
+
+**Decision metric:** new-customer ROAS.
+
+**Overlap:** shares Australia with the NZ campaign (recommendation {rec:One auction per market}).
+
+## Campaign - No Such Campaign
+
+**Job:** nothing.
+
+## Caveat
+
+**Reviewed 2026-09-22:** two recommendations added by hand, one dropped; see {rec:Competitor names}.
+"""
+
+class ReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.ws = full_ws(self.tmp.name)
+        (self.ws / "runs" / RUN / "audit-review.md").write_text(REVIEW)
+        self.rep, self.out = audit.run(self.ws, RUN, executive=True)
+        self.text = (self.out / "audit.md").read_text()
+    def tearDown(self):
+        self.tmp.cleanup()
+    def test_added_recommendation_sits_after_its_anchor_and_is_numbered(self):
+        titles = rec_titles(self.rep)
+        i = titles.index("A fortnightly negative pass")
+        self.assertEqual(titles[i + 1], "Competitor names decided")
+        self.assertEqual([r["number"] for r in self.rep.recs], list(range(1, len(self.rep.recs) + 1)))
+        added = next(r for r in self.rep.recs if r["title"] == "Competitor names decided")
+        self.assertEqual(added["reviewed"], "added")
+        self.assertEqual(added["Owner"], audit.OWNER)          # defaults filled
+        self.assertEqual(added["Approval"], audit.DRAFT)
+        self.assertIn("**Reviewed:** added by the reviewer in audit-review.md.", self.text)
+    def test_added_without_anchor_goes_to_its_section_end(self):
+        titles = rec_titles(self.rep)
+        roles = [r["title"] for r in self.rep.recs if r["section"] == "roles"]
+        self.assertEqual(roles[-1], "A landing page call")
+    def test_override_drops_and_edits(self):
+        titles = rec_titles(self.rep)
+        self.assertNotIn("Search Partners on one campaign", titles)
+        poor = next(r for r in self.rep.recs if r["title"] == "Rebuild the Poor-strength ads")
+        self.assertEqual(poor["Confidence"], "medium")
+        self.assertIn("two weeks", poor["Risk"])
+        self.assertEqual(poor["reviewed"], "edited")
+        self.assertIn("dropped the draft", " ".join(self.rep.review_notes))
+    def test_tokens_resolve_to_numbers(self):
+        self.assertNotIn("{rec:", self.text)
+        added = next(r for r in self.rep.recs if r["title"] == "Competitor names decided")
+        generic = next(r for r in self.rep.recs if r["title"].startswith('"Generic negatives"'))
+        self.assertIn(f"recommendation {generic['number']} for the list", added["Issue"])
+        overlap = next(r for r in self.rep.recs if r["title"].startswith("One auction per market"))
+        self.assertIn(f"(recommendation {overlap['number']})", self.text)
+        self.assertIn(f"see {added['number']}.", self.text)
+    def test_campaign_lines_merge_in_order_and_unknown_campaign_is_reported(self):
+        block = next(lines for n, lines in self.rep.campaigns if n == "Search | Widgets | AU")
+        labels = [l for l, _ in block]
+        self.assertEqual(labels[0], "Job")
+        self.assertLess(labels.index("Signal"), labels.index("Decision metric"))
+        self.assertLess(labels.index("Decision metric"), labels.index("Overlap"))
+        self.assertTrue(any("No Such Campaign" in n for n in self.rep.review_notes))
+        self.assertIn("Could not place:", self.text)
+    def test_caveat_and_json(self):
+        self.assertIn("**Reviewed 2026-09-22:** two recommendations added", self.text)
+        self.assertIn("2 recommendations added and 1 edited", self.text)
+        j = json.loads((self.out / "audit.json").read_text())
+        self.assertEqual(j["review"]["file"], f"runs/{RUN}/audit-review.md")
+        self.assertEqual(sum(1 for r in j["recommendations"] if r.get("reviewed") == "added"), 2)
+    def test_rerun_is_idempotent(self):
+        first = self.text
+        audit.run(self.ws, RUN, executive=True)
+        self.assertEqual((self.out / "audit.md").read_text(), first)
+    def test_executive_can_pick_a_reviewed_recommendation(self):
+        three = audit.three_changes(self.rep)
+        self.assertEqual(len(three), 3)
+
 class CliTests(unittest.TestCase):
     def test_audit_subcommand(self):
         with tempfile.TemporaryDirectory() as d:

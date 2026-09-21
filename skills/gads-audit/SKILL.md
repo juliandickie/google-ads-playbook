@@ -18,7 +18,15 @@ ${CLAUDE_PLUGIN_ROOT}/bin/gads audit --workspace <ws> --run-date <date> --execut
 
 `gads audit` reads everything the workspace holds for that run date (the exports, the three calculator files, the deep pass, the brand SERP check and the reconciliation from this run or the latest earlier one) and writes `runs/<date>/audit.md`, `audit.json` and `audit-executive.md`. Its "Missing evidence" section is the list of what to produce next (a SERP check, a reconciliation, a deep pass); every control a missing source would have decided reads "no evidence".
 
-Then review, do not rewrite: every recommendation in audit.md is a rule-drafted draft. Read each against the evidence it cites, correct the Change, Risk and Impact lines where the account's context says otherwise, add the recommendations only judgement can make (competitor names, audience mismatches, offer and landing page calls, anything the brand kit informs), delete a draft the evidence does not carry, and keep the numbering continuous. The executive version repeats the top three changes; re-read it after editing the technical one. Say in the report's Caveats which drafts were changed.
+Then review in `runs/<date>/audit-review.md`, never in audit.md (every run rewrites it). Every recommendation in audit.md is a rule-drafted draft. Read each against the evidence it cites and write the review file:
+
+- `## Recommendation - <title>` with `**Section:**` (tracking, leakage, pmax, misallocation, feed, roles), optional `**After:** <the drafted title it follows>`, and the twelve fields as `**Label:**` lines, for the recommendations only judgement can make (competitor names, audience mismatches, offer and landing page calls, anything the brand kit informs). Recompute every figure on this run's exports; never copy an earlier audit's numbers.
+- `## Override - <drafted title start>` with the fields to replace (Change, Risk, Impact, Confidence) or `**Drop:** yes` for a draft the evidence does not carry.
+- `## Campaign - <name>` with `**Job:**`, `**Decision metric:**`, `**Overlap:**` for the per-campaign roles narrative.
+- `## Caveat` lines saying what was reviewed and when.
+- `{rec:<title start>}` anywhere becomes that recommendation's number after numbering.
+
+Rerun `gads audit`; the numbering is continuous, reviewed items carry a Reviewed line, and the Caveats say how many were added and edited and name anything the merge could not place (fix those before shipping). The executive version repeats the top three changes; re-read it after the review.
 
 ## The calculators behind it
 

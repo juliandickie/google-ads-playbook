@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.2.1 - 2026-09-22
+
+- Reviewed additions survive a rerun: `runs/<date>/audit-review.md` is the reviewer's file, merged by `gads audit` on every run. It carries recommendations to add (with the drafted title they follow), overrides that edit or drop a draft, per-campaign Job, Decision metric and Overlap lines, and caveats. `{rec:<title start>}` resolves to a recommendation's number after numbering, so cross-references never go stale. Reviewed recommendations carry a Reviewed line; the Caveats say how many were added and edited and name anything the merge could not place. audit.md is a build artefact from here on; edits go in the review file.
 ## 0.2.0 - 2026-09-22
 
 - `gads audit` writes the audit report itself: `runs/<date>/audit.md` in the document layout, `audit.json`, and with `--executive` a two-page `audit-executive.md` for the client owner. It reads whatever the workspace holds (exports, the three calculator runs, the deep pass, the brand SERP check and reconciliation from this or the latest earlier run) and names every missing source; controls those sources would have decided read "no evidence". Recommendations are rule-drafted with all twelve fields and marked draft for the gads-audit skill to review. The 06 checklist walk names every control from the shipped reference.
