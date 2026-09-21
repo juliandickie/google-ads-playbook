@@ -32,7 +32,7 @@ Two PMax campaigns (brand-allowed capture, brand-excluded scaling). Non-branded 
 ## Rules
 
 - Numbers come from script output files under `runs/<date>/` and the deep pass files under `raw/deep-<date>/`, cited by path. Never compute a cross-tab, a window comparison, or a leakage share in your head.
-- Reports are read by a person: one line per recommendation field, per checklist control, per lettered sub-point. A recommendation is a bold number line followed by one bullet per field, never a paragraph with inline labels.
+- Reports are read by a person: a heading per section and per recommendation, one labelled fact per line (`**Label:** value`) with a blank line between, no bullets or tables in the body, and every cited file a clickable link that resolves (absolute `file://` for the workspace, GitHub URLs for references). Never a paragraph with inline labels. The full shape is in the gads-audit skill's Report shape.
 - Summarise what the data says and what is missing before recommending anything.
 - Never report blended ROAS alone; pair it with true new-customer ROAS from `leakage.md`.
 - Never scale on one window. `windows.md` decides.

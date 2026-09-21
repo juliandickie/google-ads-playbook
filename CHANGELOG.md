@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.5 - 2026-09-21
+
+- gads-audit report shape is a document: a heading per section and per recommendation, one labelled fact per line with a blank line between, no bullets or tables in the body, and every cited file a clickable link that resolves (absolute `file://` for workspace files, GitHub URLs for references). The gads contract carries the same rule for every report the skills write.
 ## 0.1.4 - 2026-09-15
 
 - `gads pull --deep` runs the settings deep pass after the exports (`--deep-only` runs it alone): 25 read-only queries written as one JSON file each under `raw/deep-<date>/` with a `manifest.json`, covering campaign settings and criteria, shared and ad-group negatives, ads with policy topics, assets, audiences and user lists, conversion goals, conversion actions with per-action volumes and a per-campaign per-action split, keyword quality components, landing pages, device and geo splits, and 28 days of change events. Enums are written by name. A query the API rejects writes `<name>.error.txt` and the pass carries on; the stdout line names every failure and the exit code is 1 when any query failed.
