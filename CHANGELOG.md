@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 - 2026-09-22
+
+- `gads audit` writes the audit report itself: `runs/<date>/audit.md` in the document layout, `audit.json`, and with `--executive` a two-page `audit-executive.md` for the client owner. It reads whatever the workspace holds (exports, the three calculator runs, the deep pass, the brand SERP check and reconciliation from this or the latest earlier run) and names every missing source; controls those sources would have decided read "no evidence". Recommendations are rule-drafted with all twelve fields and marked draft for the gads-audit skill to review. The 06 checklist walk names every control from the shipped reference.
+- gads-audit runs `gads audit --executive` first and reviews the drafts instead of composing the report by hand.
 ## 0.1.5 - 2026-09-21
 
 - gads-audit report shape is a document: a heading per section and per recommendation, one labelled fact per line with a blank line between, no bullets or tables in the body, and every cited file a clickable link that resolves (absolute `file://` for workspace files, GitHub URLs for references). The gads contract carries the same rule for every report the skills write.

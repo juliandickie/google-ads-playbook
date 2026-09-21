@@ -7,13 +7,20 @@ description: Run the six account audits on a Google Ads account - conversion tra
 
 Load the `gads` skill first and run `gads validate`. Needs `campaigns.csv` and `search_terms.csv` at minimum; `keywords.csv`, `products.csv`, `conversion_actions.csv`, and `feed.tsv` make the audits complete. Run the pull with `--deep` (or `gads pull --deep-only` on existing exports) so `raw/deep-<date>/` holds the settings the exports cannot carry; read its `manifest.json` first and name any query that failed as missing evidence.
 
-## Run the calculators first
+## Run the calculators, then let the CLI write the report
 
 ```
-${CLAUDE_PLUGIN_ROOT}/bin/gads leakage --workspace <ws>
-${CLAUDE_PLUGIN_ROOT}/bin/gads misallocate --workspace <ws>
-${CLAUDE_PLUGIN_ROOT}/bin/gads windows --workspace <ws>
+${CLAUDE_PLUGIN_ROOT}/bin/gads leakage --workspace <ws> --run-date <date>
+${CLAUDE_PLUGIN_ROOT}/bin/gads misallocate --workspace <ws> --run-date <date>
+${CLAUDE_PLUGIN_ROOT}/bin/gads windows --workspace <ws> --run-date <date>
+${CLAUDE_PLUGIN_ROOT}/bin/gads audit --workspace <ws> --run-date <date> --executive
 ```
+
+`gads audit` reads everything the workspace holds for that run date (the exports, the three calculator files, the deep pass, the brand SERP check and the reconciliation from this run or the latest earlier one) and writes `runs/<date>/audit.md`, `audit.json` and `audit-executive.md`. Its "Missing evidence" section is the list of what to produce next (a SERP check, a reconciliation, a deep pass); every control a missing source would have decided reads "no evidence".
+
+Then review, do not rewrite: every recommendation in audit.md is a rule-drafted draft. Read each against the evidence it cites, correct the Change, Risk and Impact lines where the account's context says otherwise, add the recommendations only judgement can make (competitor names, audience mismatches, offer and landing page calls, anything the brand kit informs), delete a draft the evidence does not carry, and keep the numbering continuous. The executive version repeats the top three changes; re-read it after editing the technical one. Say in the report's Caveats which drafts were changed.
+
+## The calculators behind it
 
 Read the three markdown files in `runs/<date>/`. They are the evidence for audits 1.2, 1.4, and the scaling parts of 1.6. Do not restate their numbers from memory; quote the file. leakage.md and misallocation.md name the campaign window and the search-terms window they mix; the pull defaults keep them equal, so if the windows line says they differ, someone passed different flags, and you read that line before quoting the branded share.
 

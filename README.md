@@ -6,7 +6,7 @@ Audit and rebuild a Google Ads account with the $100M GADs playbook, from inside
 
 - `/gads precheck` - should this brand be on Google yet, and the revenue ceiling from Keyword Planner volume.
 - `/gads setup` - OAuth once, list the accounts under your MCC, pull 180 days into a per-account workspace, interview the brand kit, build the brand brain.
-- `/gads audit` - the six audits with real numbers: branded leakage and true new-customer ROAS, PMax constraint, spend misallocation, campaign roles, conversion tracking, feed.
+- `/gads audit` - the six audits with real numbers: branded leakage and true new-customer ROAS, PMax constraint, spend misallocation, campaign roles, conversion tracking, feed. `gads audit` writes the report (technical and executive) from the files; the skill reviews the drafted recommendations.
 - `/gads build` - customer language, competitor angles, keyword universe, campaign architecture, RSA copy that passes a hard spec, landing page briefs.
 - `/gads feed` - the 10-point feed score and the rebuild list.
 - `/gads creative` - the 9-shot arc, the 7 AI formats, prompt files for image and video generation.
@@ -38,9 +38,11 @@ No API access? Export from the Google Ads UI and run `gads normalise`. Everythin
 
 ## The scripts
 
-`bin/gads` with subcommands `validate`, `normalise`, `leakage`, `misallocate`, `windows`, `feedscore`, `ceiling`, `bundle`, `auth`, `accounts`, `pull`. Stdlib Python except the last three, which run under `uv` with the Google Ads client. Every threshold is a flag; the defaults are the playbook's practitioner numbers, meant to be replaced by the account's own history after 30 days.
+`bin/gads` with subcommands `validate`, `normalise`, `leakage`, `misallocate`, `windows`, `feedscore`, `ceiling`, `bundle`, `auth`, `accounts`, `pull`, `audit`. Stdlib Python except the last three, which run under `uv` with the Google Ads client. Every threshold is a flag; the defaults are the playbook's practitioner numbers, meant to be replaced by the account's own history after 30 days.
 
 `gads pull` defaults to 180 days for both campaigns and search terms, so leakage and misallocate read one window; pass `--days` and `--search-terms-days` to change either (both calculators say which windows they used when they differ). `/gads manage` pulls 70 days on purpose, enough for the 30-versus-prior-30 gate with slack.
+
+`gads audit --workspace <ws> [--run-date <date>] [--deep <date>] [--executive]` composes `runs/<date>/audit.md` (a heading per section and per recommendation, one labelled fact per line, every source a clickable link), `audit.json`, and the two-page `audit-executive.md` for the client owner. Every source is optional and every gap is named; the recommendations are drafted by rule from the findings and marked draft until reviewed. Render the markdown to a PDF with whatever report tooling you use.
 
 `gads pull --deep` adds the settings deep pass the audit needs and the exports cannot carry: 25 read-only queries, one JSON file each under `raw/deep-<date>/` with a manifest (campaign settings and criteria, negatives, ads and policy topics, assets, audiences, conversion goals and per-action conversion volumes, keyword quality, landing pages, device and geo splits, 28 days of change events). `--deep-only` reruns just that pass. A query the API rejects writes `<name>.error.txt` beside the others and the pass continues.
 
