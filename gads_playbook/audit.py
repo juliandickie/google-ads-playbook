@@ -431,9 +431,17 @@ def rule_tracking(rep, totals):
     cust = ev.deep("customer")
     if cust:
         c = cust[0]
-        ecl = c.get("customer.conversion_tracking_setting.enhanced_conversions_for_leads_enabled")
-        rep.control("G43", "partial" if ecl else "warning", "enhanced conversions for leads on; purchases not visible through the API" if ecl else "enhanced conversions for leads off")
-        rep.add(S, "Account settings", f"auto-tagging {'on' if c.get('customer.auto_tagging_enabled') else 'off'}; enhanced conversions for leads {'on' if ecl else 'off'}; conversion tracking {c.get('customer.conversion_tracking_setting.conversion_tracking_status', 'unknown')}. Source: {ev.link(ev.rel(ev.deep_dir / 'customer.json'))}.")
+        eff_key = "customer.conversion_tracking_setting.effective_enablement_setting"
+        if eff_key in c:  # v26 and later: the unified, account-wide setting
+            eff = c.get(eff_key) or "UNSPECIFIED"
+            on = eff == "ON"
+            rep.control("G43", "partial" if on else "warning", "enhanced conversions on (effective setting); verification not visible through the API" if on else f"enhanced conversions effective setting {eff}")
+            ec_text = f"enhanced conversions {'on' if on else eff.lower()} (effective setting)"
+        else:  # deep passes before v26 carried the leads-only flag; kept so their audits regenerate unchanged
+            ecl = c.get("customer.conversion_tracking_setting.enhanced_conversions_for_leads_enabled")
+            rep.control("G43", "partial" if ecl else "warning", "enhanced conversions for leads on; purchases not visible through the API" if ecl else "enhanced conversions for leads off")
+            ec_text = f"enhanced conversions for leads {'on' if ecl else 'off'}"
+        rep.add(S, "Account settings", f"auto-tagging {'on' if c.get('customer.auto_tagging_enabled') else 'off'}; {ec_text}; conversion tracking {c.get('customer.conversion_tracking_setting.conversion_tracking_status', 'unknown')}. Source: {ev.link(ev.rel(ev.deep_dir / 'customer.json'))}.")
     else:
         rep.control("G43", "no evidence", "customer.json needs the deep pass")
     uploads = [a for a in fired if a["type"] in UPLOAD_TYPES] if volumes else [a for a in actions if a["type"] in UPLOAD_TYPES]
@@ -987,6 +995,8 @@ def render_audit(rep):
             L += [f"**{label}:** " + ", ".join(ev.link(u) for u in items) + ".", ""]
     if ev.deep_dir:
         L += [f"**Deep pass windows:** " + "; ".join(f"{k} {v[0]} to {v[1]}" for k, v in (ev.manifest or {}).get("windows", {}).items()) + ".", ""]
+        if (ev.manifest or {}).get("api_version"):
+            L += [f"**Google Ads API:** {ev.manifest['api_version']}" + (f", client google-ads {ev.manifest['client_version']}" if ev.manifest.get("client_version") else "") + ".", ""]
     L += ["**Playbook references:** [02 architecture](https://github.com/juliandickie/google-ads-playbook/blob/main/references/02-google-ads-architecture.md), [06 audit checklist](https://github.com/juliandickie/google-ads-playbook/blob/main/references/06-google-audit-checklist.md), [07 conversion tracking](https://github.com/juliandickie/google-ads-playbook/blob/main/references/07-conversion-tracking-execution.md).", ""]
     if ev.missing:
         L += ["## Missing evidence", "", "Sources this run did not have and what would produce them. Every control they would have decided reads \"no evidence\" below.", ""]

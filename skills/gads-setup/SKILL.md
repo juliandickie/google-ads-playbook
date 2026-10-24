@@ -1,6 +1,6 @@
 ---
 name: gads-setup
-description: Set up a Google Ads account workspace - OAuth and developer token, MCC access, the first data pull or export normalisation, the brand kit interview, and the brand brain. Use for a new account, "connect Google Ads", "set up the workspace", "brand kit", or when gads validate finds no gads.json.
+description: Set up a Google Ads account workspace - OAuth and Cloud project API access, MCC access, the first data pull or export normalisation, the brand kit interview, and the brand brain. Use for a new account, "connect Google Ads", "set up the workspace", "brand kit", or when gads validate finds no gads.json.
 ---
 
 # gads-setup
@@ -9,17 +9,17 @@ Load the `gads` skill first. Then work through the gates in order; each one has 
 
 ## Gate 1 - credentials (once per machine)
 
-Prerequisites the operator supplies: a Google Cloud project with the Google Ads API enabled, an OAuth desktop client JSON downloaded from that project, the developer token from the manager account's API Center (Explorer access or better), and the manager (MCC) customer id.
+Prerequisites the operator supplies: a Google Cloud project with the Google Ads API enabled, an OAuth desktop client JSON downloaded from that project, Explorer access or better for that project (Google Ads API Overview page in Cloud Console), and the manager (MCC) customer id. Since 2026-09-09 API access belongs to the Cloud project that owns the OAuth client; developer tokens were sunset and the API ignores one, so none is needed.
 
 Run:
 
 ```
-${CLAUDE_PLUGIN_ROOT}/bin/gads auth --client-json <path> --login-customer-id <mcc id> [--op-ref "op://..."]
+${CLAUDE_PLUGIN_ROOT}/bin/gads auth --client-json <path> --login-customer-id <mcc id>
 ```
 
-It opens a browser consent, then writes `~/.config/google-ads-playbook/adc.json` and `google-ads.yaml` (mode 600). adc.json also records the OAuth client's GCP project as its quota project (override with `--gcp-project`); use the same project id for the plugin's `gcp_project_id` value. Tell the operator to set the plugin's `adc_path`, `developer_token`, `gcp_project_id`, and `login_customer_id` in the plugin config so the bundled MCP can start. The token is stored twice on purpose (keychain for the MCP, yaml for the CLI); say so.
+It opens a browser consent, then writes `~/.config/google-ads-playbook/adc.json` and `google-ads.yaml` (mode 600). adc.json also records the OAuth client's GCP project as its quota project (override with `--gcp-project`); use the same project id for the plugin's `gcp_project_id` value. Tell the operator to set the plugin's `adc_path`, `gcp_project_id`, and `login_customer_id` in the plugin config so the bundled MCP can start; an MCP call that fails with `${user_config.adc_path}` in the message means those values are not set.
 
-Check: `${CLAUDE_PLUGIN_ROOT}/bin/gads accounts --login-customer <mcc id>` lists the client accounts. If the API answers that the token is only approved for test accounts, stop and explain the API Center access request; nothing downstream will work.
+Check: `${CLAUDE_PLUGIN_ROOT}/bin/gads accounts --login-customer <mcc id>` lists the client accounts. If the API answers CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION (or an authorization error on a production account), the Cloud project has only Test access: stop and send the operator to the Google Ads API Overview page in Cloud Console to apply for Explorer access; nothing downstream will work.
 
 ## Gate 2 - data
 

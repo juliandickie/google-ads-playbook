@@ -5,7 +5,7 @@ from . import __version__, io, registry, schema
 
 API_SUBCOMMANDS = {"auth", "accounts", "pull"}
 
-UV_WITH = ["google-ads>=25", "google-auth-oauthlib>=1.2", "pyyaml>=6"]
+UV_WITH = ["google-ads>=34", "google-auth-oauthlib>=1.2", "pyyaml>=6"]
 
 def uv_command(argv):
     root = str(Path(__file__).resolve().parents[1])

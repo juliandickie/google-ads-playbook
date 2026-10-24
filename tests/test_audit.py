@@ -271,6 +271,44 @@ REVIEW = """# Reviewed additions
 **Reviewed 2026-09-22:** two recommendations added by hand, one dropped; see {rec:Competitor names}.
 """
 
+class EnhancedConversionsTests(unittest.TestCase):
+    """v26 replaced the leads-only flag with the account-wide effective setting; the audit reads either."""
+    def run_with(self, customer):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            (ws / "raw" / f"deep-{DEEP}" / "customer.json").write_text(json.dumps([customer]))
+            rep, out = audit.run(ws, RUN)
+            return rep, (out / "audit.md").read_text()
+    def test_effective_on_is_partial(self):
+        rep, text = self.run_with({"customer.auto_tagging_enabled": True,
+                                   "customer.conversion_tracking_setting.enablement_setting": None,
+                                   "customer.conversion_tracking_setting.effective_enablement_setting": "ON",
+                                   "customer.conversion_tracking_setting.conversion_tracking_status": "CONVERSION_TRACKING_MANAGED_BY_SELF"})
+        self.assertEqual(rep.controls["G43"][0], "partial")
+        self.assertIn("enhanced conversions on (effective setting)", text)
+        self.assertNotIn("for leads", text)
+    def test_effective_off_is_a_warning(self):
+        rep, text = self.run_with({"customer.auto_tagging_enabled": True,
+                                   "customer.conversion_tracking_setting.effective_enablement_setting": "OFF"})
+        self.assertEqual(rep.controls["G43"][0], "warning")
+        self.assertIn("enhanced conversions off (effective setting)", text)
+    def test_legacy_flag_still_reads_for_older_deep_passes(self):
+        rep, text = self.run_with({"customer.auto_tagging_enabled": True,
+                                   "customer.conversion_tracking_setting.enhanced_conversions_for_leads_enabled": True})
+        self.assertEqual(rep.controls["G43"][0], "partial")
+        self.assertIn("enhanced conversions for leads on", text)
+
+class ApiVersionLineTests(unittest.TestCase):
+    def test_manifest_version_is_printed_and_absent_when_unrecorded(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            _, out = audit.run(ws, RUN)
+            self.assertNotIn("**Google Ads API:**", (out / "audit.md").read_text())
+            mp = ws / "raw" / f"deep-{DEEP}" / "manifest.json"
+            m = json.loads(mp.read_text()); m.update({"api_version": "v26", "client_version": "34.0.0"}); mp.write_text(json.dumps(m))
+            _, out = audit.run(ws, RUN)
+            self.assertIn("**Google Ads API:** v26, client google-ads 34.0.0.", (out / "audit.md").read_text())
+
 class ReviewTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

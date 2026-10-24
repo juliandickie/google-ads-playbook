@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2 - 2026-10-23
+
+- Google Ads API v26: the deep pass reads the unified enhanced conversions setting (`enablement_setting`, `effective_enablement_setting`) in place of `enhanced_conversions_for_leads_enabled`, which v26 removed and which broke the `customer` query; the audit's G43 reads it and still reads the old flag in earlier deep passes.
+- The API version is pinned to v26 instead of following the client default (`google-ads>=34`); gads.json and the deep manifest record the API and client versions and the audit names them.
+- Developer tokens are optional, following Google's 2026-09-09 sunset: `gads auth` no longer prompts for one, the plugin config no longer asks for one, and pull's error text points at the Cloud project's access level instead of the API Center.
+- The bundled Google Ads MCP is pinned to v0.0.5, which runs without a developer token.
 ## 0.2.1 - 2026-09-22
 
 - Reviewed additions survive a rerun: `runs/<date>/audit-review.md` is the reviewer's file, merged by `gads audit` on every run. It carries recommendations to add (with the drafted title they follow), overrides that edit or drop a draft, per-campaign Job, Decision metric and Overlap lines, and caveats. `{rec:<title start>}` resolves to a recommendation's number after numbering, so cross-references never go stale. Reviewed recommendations carry a Reviewed line; the Caveats say how many were added and edited and name anything the merge could not place. audit.md is a build artefact from here on; edits go in the review file.

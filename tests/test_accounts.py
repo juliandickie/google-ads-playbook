@@ -17,7 +17,8 @@ class FakeAccountsService:
 class FakeAccountsClient:
     def __init__(self):
         self.svc = FakeAccountsService()
-    def get_service(self, name):
+    def get_service(self, name, version=None):
+        self.version = version
         return self.svc
 
 class AccountsTests(unittest.TestCase):
@@ -28,6 +29,11 @@ class AccountsTests(unittest.TestCase):
         self.assertEqual(rows[0]["name"], "Client A")
         self.assertEqual(rows[0]["manager"], "")
         self.assertEqual(rows[0]["status"], "ENABLED")
+    def test_calls_the_pinned_api_version(self):
+        from gads_playbook import pull
+        client = FakeAccountsClient()
+        accounts.run("9876543210", client=client)
+        self.assertEqual(client.version, pull.API_VERSION)
     def test_query_selects_level_but_does_not_filter_on_it(self):
         # R39: the level <= 1 filter hid sub-manager accounts and their clients; level is still
         # selected (and printed) so the operator can see the depth, but nothing is excluded by it.
@@ -41,7 +47,8 @@ class RaisingAccountsService:
 class RaisingAccountsClient:
     def __init__(self):
         self.svc = RaisingAccountsService()
-    def get_service(self, name):
+    def get_service(self, name, version=None):
+        self.version = version
         return self.svc
 
 class AccountsApiFailureTests(unittest.TestCase):

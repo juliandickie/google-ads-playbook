@@ -31,7 +31,7 @@ class UvTests(unittest.TestCase):
         from gads_playbook.cli import uv_command
         cmd, root = uv_command(["pull", "--customer", "1"])
         self.assertEqual(cmd[:4], ["uv", "run", "--python", "3.12"])
-        self.assertIn("google-ads>=25", cmd)
+        self.assertIn("google-ads>=34", cmd)  # the first client carrying the pinned v26
         self.assertEqual(cmd[-3:], ["pull", "--customer", "1"])
         # the root is the checkout, whatever the folder is called (clones and the plugin cache use other names)
         self.assertTrue((pathlib.Path(root) / "gads_playbook" / "cli.py").is_file(), root)

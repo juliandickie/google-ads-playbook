@@ -1,13 +1,13 @@
 """List accessible customers under the manager account. Read-only, search_stream only."""
 from . import render
-from .pull import make_client, api_error
+from .pull import make_client, api_error, service
 
 QUERY = ("SELECT customer_client.id, customer_client.descriptive_name, customer_client.manager, customer_client.level, "
          "customer_client.currency_code, customer_client.status FROM customer_client")
 
 def run(login_customer_id, client=None):
     client = client or make_client()
-    svc = client.get_service("GoogleAdsService")
+    svc = service(client)
     try:
         batches = list(svc.search_stream(customer_id=login_customer_id, query=QUERY))
     except Exception as e:  # GoogleAdsException, transport, or auth error from the API client

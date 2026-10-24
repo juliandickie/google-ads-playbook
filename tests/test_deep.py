@@ -10,6 +10,11 @@ class Approval(enum.IntEnum):
     """proto-plus enums are IntEnums: the JSON writer must name them, not number them."""
     APPROVED_LIMITED = 4
 
+class Enh(enum.IntEnum):
+    """EnhancedConversionsConfig, new in v26."""
+    UNSPECIFIED = 0
+    ON = 3
+
 class Headline:
     """Stands in for a proto-plus message: has a class-level to_dict like proto.Message."""
     def __init__(self, text, pinned):
@@ -36,7 +41,7 @@ class FakeService:
         if resource == "customer":
             return [FakeStream([NS(customer=NS(time_zone="Pacific/Auckland", id=1, descriptive_name="Example", currency_code="NZD",
                                                auto_tagging_enabled=True, optimization_score=0.5,
-                                               conversion_tracking_setting=NS(conversion_tracking_status="X", enhanced_conversions_for_leads_enabled=True,
+                                               conversion_tracking_setting=NS(conversion_tracking_status="X", enablement_setting=Enh.UNSPECIFIED, effective_enablement_setting=Enh.ON,
                                                                               google_ads_conversion_customer="customers/1", conversion_tracking_id=6)))])]
         if resource == "ad_group_ad":
             return [FakeStream([NS(campaign=NS(name="Search | Brand"), ad_group=NS(name="Core", status=NS(name="ENABLED")),
@@ -54,7 +59,8 @@ class FakeService:
 class FakeClient:
     def __init__(self, fail_on=()):
         self.svc = FakeService(fail_on)
-    def get_service(self, name):
+    def get_service(self, name, version=None):
+        self.version = version
         return self.svc
 
 END = date(2026, 9, 14)
@@ -87,6 +93,10 @@ class QueryShapeTests(unittest.TestCase):
             if "campaign.status" in q.split("WHERE")[-1] and "WHERE" in q:
                 self.assertIn("campaign.status", deep.select_fields(q), name)
         self.assertIn("LIMIT", deep.QUERIES["change_events_28d"])
+        # v26 removed the leads-only flag; the unified setting replaces it
+        self.assertNotIn("enhanced_conversions_for_leads_enabled", deep.QUERIES["customer"])
+        self.assertIn("customer.conversion_tracking_setting.effective_enablement_setting", deep.QUERIES["customer"])
+        self.assertIn("customer.conversion_tracking_setting.enablement_setting", deep.QUERIES["customer"])
         # campaign_criterion has no audience.audience field in v25 (ad_group_criterion does)
         self.assertNotIn("campaign_criterion.audience", deep.QUERIES["campaign_audiences"])
     def test_select_fields_parses_the_select_clause(self):
@@ -137,6 +147,11 @@ class RunTests(unittest.TestCase):
             self.assertEqual(conv[0]["conversion_action.primary_for_goal"], True)
             self.assertEqual(m["windows"]["metrics"][1], m["window_end"])
             self.assertEqual(m["queries"]["ads"]["rows"], 1)
+            cust = json.loads((out / "customer.json").read_text())
+            self.assertEqual(cust[0]["customer.conversion_tracking_setting.effective_enablement_setting"], "ON")
+            self.assertEqual(m["api_version"], pull.API_VERSION)
+            self.assertIn("client_version", m)
+            self.assertEqual(client.version, pull.API_VERSION)
             # the time zone probe plus one call per query, every one against the same customer
             self.assertEqual(len(client.svc.calls), len(deep.QUERIES) + 1)
             self.assertTrue(all(c == "1234567890" for c, _ in client.svc.calls))

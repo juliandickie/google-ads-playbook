@@ -6,8 +6,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from . import io, schema, gaql
 from .auth import CONFIG_DIR
 
-CAUSES = ("the developer token's access level (test-account-only tokens cannot read production accounts, request Basic or "
-          "Explorer access in the API Center), and the login customer id (the MCC must manage the target account, and "
+# Pinned so a client release cannot move the plugin to a new API version unseen (google-ads 34.0.0 moved the
+# default to v26 on 2026-10-14). Bump on purpose: validate every query on old and new first (DEVELOPMENT.md).
+API_VERSION = "v26"
+
+CAUSES = ("the Google Cloud project's Google Ads API access level (since 2026-09-09 access belongs to the project that owns "
+          "the OAuth client, not to a developer token; a project with Test access cannot read production accounts and gets "
+          "CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION, so apply for Explorer or Basic access on the Google Ads API Overview "
+          "page in Cloud Console), and the login customer id (the MCC must manage the target account, and "
           "login_customer_id in google-ads.yaml must be the MCC)")
 
 IMPRESSION_SHARE_FIELDS = ("metrics.search_impression_share", "metrics.search_budget_lost_impression_share",
@@ -45,6 +51,18 @@ def make_client():
     except Exception as e:
         raise io.MissingInput(f"failed to load {yaml}: {e}") from e
 
+def service(client):
+    """The one read-only service the plugin uses, at the pinned API version."""
+    return client.get_service("GoogleAdsService", version=API_VERSION)
+
+def client_version():
+    """The installed google-ads client version, or "" when it cannot be read (recorded beside API_VERSION)."""
+    from importlib import metadata
+    try:
+        return metadata.version("google-ads")
+    except metadata.PackageNotFoundError:
+        return ""
+
 def _resource_of(query):
     return query.split("FROM")[1].split()[0]
 
@@ -53,7 +71,7 @@ def api_error(query, e):
     return io.MissingInput(f"the {resource} query failed: {e}. Likely causes: {CAUSES}.")
 
 def _rows(client, customer_id, query, fields):
-    svc = client.get_service("GoogleAdsService")
+    svc = service(client)
     try:
         batches = list(svc.search_stream(customer_id=customer_id, query=query))
     except Exception as e:  # GoogleAdsException, transport, or auth error from the API client
@@ -105,7 +123,7 @@ def run(customer_id, login_customer_id, days, search_terms_days, ws, client=None
     data.update({"customer_id": customer_id, "login_customer_id": login_customer_id, "customer_name": cust[0]["customer.descriptive_name"],
                  "currency": cust[0]["customer.currency_code"], "timezone": cust[0]["customer.time_zone"],
                  "window_start": start.isoformat(), "window_end": end.isoformat(), "search_terms_window_start": st_start.isoformat(),
-                 "pulled_at": date.today().isoformat()})
+                 "pulled_at": date.today().isoformat(), "api_version": API_VERSION, "client_version": client_version()})
     if window_note:
         data["window_note"] = window_note
     else:

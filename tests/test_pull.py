@@ -30,7 +30,8 @@ class FakeService:
 class FakeClient:
     def __init__(self, tz="Australia/Brisbane"):
         self.svc = FakeService(tz)
-    def get_service(self, name):
+    def get_service(self, name, version=None):
+        self.version = version
         return self.svc
 
 class Ch2(enum.Enum):
@@ -52,7 +53,8 @@ class PmaxFakeService(FakeService):
 class PmaxFakeClient:
     def __init__(self, tz="Australia/Brisbane"):
         self.svc = PmaxFakeService(tz)
-    def get_service(self, name):
+    def get_service(self, name, version=None):
+        self.version = version
         return self.svc
 
 class PullTests(unittest.TestCase):
@@ -67,6 +69,9 @@ class PullTests(unittest.TestCase):
             self.assertEqual(rows[0]["campaign.status"], "ENABLED")
             data = json.loads((ws / "gads.json").read_text())
             self.assertEqual(data["currency"], "AUD")
+            self.assertEqual(data["api_version"], pull.API_VERSION)
+            self.assertIn("client_version", data)
+            self.assertEqual(client.version, pull.API_VERSION)
             self.assertEqual(data["customer_id"], "1234567890")
             self.assertIn("window_start", data)
             queried = {q.split("FROM")[1].split()[0] for _, q in client.svc.calls}
@@ -97,7 +102,8 @@ class RaisingService:
 class RaisingClient:
     def __init__(self, fail_on):
         self.svc = RaisingService(fail_on)
-    def get_service(self, name):
+    def get_service(self, name, version=None):
+        self.version = version
         return self.svc
 
 class PullApiFailureTests(unittest.TestCase):
@@ -110,7 +116,9 @@ class PullApiFailureTests(unittest.TestCase):
             msg = str(cm.exception)
             self.assertIn("Google says no", msg)
             self.assertIn("campaign", msg)
-            self.assertIn("developer token", msg)
+            self.assertIn("Cloud project", msg)
+            self.assertIn("CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION", msg)
+            self.assertNotIn("API Center", msg)
             self.assertIn("login customer", msg)
             self.assertFalse((ws / "exports").exists())
             self.assertFalse((ws / "gads.json").exists())
@@ -122,7 +130,9 @@ class PullApiFailureTests(unittest.TestCase):
             msg = str(cm.exception)
             self.assertIn("Google says no", msg)
             self.assertIn("customer", msg)
-            self.assertIn("developer token", msg)
+            self.assertIn("Cloud project", msg)
+            self.assertIn("CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION", msg)
+            self.assertNotIn("API Center", msg)
             self.assertIn("login customer", msg)
             self.assertFalse((ws / "exports").exists())
             self.assertFalse((ws / "gads.json").exists())

@@ -18,6 +18,15 @@ class AuthFilesTests(unittest.TestCase):
             for p in paths.values():
                 self.assertEqual(stat.S_IMODE(os.stat(p).st_mode), 0o600)
 
+    def test_no_developer_token_line_when_none_is_given(self):
+        # the token is optional since the 2026-09-09 sunset; the yaml must not carry an empty or "None" token
+        with tempfile.TemporaryDirectory() as d:
+            paths = auth.write_credential_files(Path(d), "cid", "csec", "rtok", None, "1234567890")
+            y = paths["yaml"].read_text()
+            self.assertNotIn("developer_token", y)
+            self.assertIn("client_id: cid", y)
+            self.assertIn("login_customer_id: 1234567890", y)
+
     def test_overwrites_preexisting_world_readable_file_as_0600(self):
         # Ruling R27: a pre-existing 0o644 file must end at 0o600, not keep its old mode.
         with tempfile.TemporaryDirectory() as d:
@@ -104,6 +113,20 @@ class CmdAuthNormalisationTests(unittest.TestCase):
             yaml_text = (config_dir / "google-ads.yaml").read_text()
             self.assertIn("login_customer_id: 1234567890", yaml_text)
             self.assertNotIn("123-456-7890", yaml_text)
+
+    def test_no_token_means_no_prompt_and_no_token_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            config_dir = Path(d) / "config"
+            client_json = Path(d) / "client.json"
+            client_json.write_text('{"installed": {"client_id": "x", "project_id": "p-1"}}')
+            args = argparse.Namespace(client_json=str(client_json), login_customer_id="1234567890",
+                                      developer_token=None, op_ref=None, gcp_project=None)
+            with mock.patch.object(auth, "CONFIG_DIR", config_dir), \
+                 mock.patch.object(auth, "run_oauth", return_value=("c", "s", "r")), \
+                 mock.patch("getpass.getpass", side_effect=AssertionError("prompted for a token")):
+                with contextlib.redirect_stdout(StringIO()):
+                    self.assertEqual(auth.cmd_auth(args), 0)
+            self.assertNotIn("developer_token", (config_dir / "google-ads.yaml").read_text())
 
     def test_quota_project_id_from_client_json(self):
         with tempfile.TemporaryDirectory() as d:

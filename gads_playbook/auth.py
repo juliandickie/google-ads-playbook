@@ -21,8 +21,12 @@ def write_credential_files(config_dir, client_id, client_secret, refresh_token, 
         adc_obj["quota_project_id"] = quota_project_id
     _write_0600(adc, json.dumps(adc_obj, indent=2) + "\n")
     yaml = config_dir / "google-ads.yaml"
-    _write_0600(yaml, "\n".join([f"developer_token: {developer_token}", f"client_id: {client_id}", f"client_secret: {client_secret}",
-                               f"refresh_token: {refresh_token}", f"login_customer_id: {login_customer_id}", "use_proto_plus: true"]) + "\n")
+    # Developer tokens were sunset on 2026-09-09 (access belongs to the OAuth client's Cloud project and the API
+    # ignores a token); one is written only when given, because a future API version will reject requests that send one.
+    lines = [f"developer_token: {developer_token}"] if developer_token else []
+    lines += [f"client_id: {client_id}", f"client_secret: {client_secret}", f"refresh_token: {refresh_token}",
+              f"login_customer_id: {login_customer_id}", "use_proto_plus: true"]
+    _write_0600(yaml, "\n".join(lines) + "\n")
     for p in (adc, yaml):  # explicit chmod also corrects a pre-existing file's mode
         os.chmod(p, 0o600)
     return {"adc": adc, "yaml": yaml}
@@ -63,9 +67,6 @@ def cmd_auth(args):
     if not client_json.exists():
         raise io.MissingInput(f"OAuth client file not found: {client_json}. Download the desktop client JSON from Google Cloud Console, APIs and Services, Credentials.")
     token = args.developer_token or (_read_op(args.op_ref) if args.op_ref else None)
-    if not token:
-        import getpass
-        token = getpass.getpass("Google Ads developer token (from the manager account API Center): ").strip()
     cid, csec, rtok = run_oauth(client_json)
     quota_project_id = getattr(args, "gcp_project", None) or read_client_project(client_json)
     paths = write_credential_files(CONFIG_DIR, cid, csec, rtok, token, args.login_customer_id.replace("-", ""), quota_project_id=quota_project_id)
@@ -77,7 +78,7 @@ def register(sub, add_common):
     p = sub.add_parser("auth", help="run the OAuth desktop flow and write adc.json and google-ads.yaml")
     p.add_argument("--client-json", required=True, help="OAuth desktop client secrets JSON from Google Cloud Console")
     p.add_argument("--login-customer-id", required=True, help="manager (MCC) customer id, digits only")
-    p.add_argument("--developer-token", help="developer token; omit to be prompted")
-    p.add_argument("--op-ref", help="1Password reference, e.g. op://<vault>/<item>/<field>")
+    p.add_argument("--developer-token", help="optional and ignored by the API since the 2026-09-09 developer token sunset; written to google-ads.yaml only when given")
+    p.add_argument("--op-ref", help="1Password reference for an optional developer token, e.g. op://<vault>/<item>/<field>")
     p.add_argument("--gcp-project", help="GCP project id for adc.json's quota_project_id; overrides the client JSON's project_id")
     p.set_defaults(func=cmd_auth)

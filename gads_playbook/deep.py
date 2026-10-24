@@ -9,7 +9,7 @@ import enum, json
 from datetime import date, timedelta
 from pathlib import Path
 from . import io
-from .pull import make_client, _window_end
+from .pull import API_VERSION, client_version, make_client, service, _window_end
 
 METRIC_DAYS = 90    # device, geo, landing page, conversion action volumes
 QUALITY_DAYS = 30   # keyword quality components
@@ -26,7 +26,8 @@ QUERIES = {
         "SELECT customer.id, customer.descriptive_name, customer.currency_code, customer.time_zone, "
         "customer.auto_tagging_enabled, customer.optimization_score, "
         "customer.conversion_tracking_setting.conversion_tracking_status, "
-        "customer.conversion_tracking_setting.enhanced_conversions_for_leads_enabled, "
+        "customer.conversion_tracking_setting.enablement_setting, "
+        "customer.conversion_tracking_setting.effective_enablement_setting, "
         "customer.conversion_tracking_setting.google_ads_conversion_customer, "
         "customer.conversion_tracking_setting.conversion_tracking_id FROM customer"),
     "campaign_settings": (
@@ -188,7 +189,7 @@ def flatten(row, fields):
     return out
 
 def _raw_rows(client, customer_id, query):
-    svc = client.get_service("GoogleAdsService")
+    svc = service(client)
     rows = []
     for batch in svc.search_stream(customer_id=customer_id, query=query):
         rows.extend(batch.results)
@@ -206,6 +207,7 @@ def run(customer_id, ws, run_date=None, client=None, names=None):
     out_dir = ws / "raw" / f"deep-{day}"
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest = {"customer_id": customer_id, "run_date": day, "window_end": w["end"],
+                "api_version": API_VERSION, "client_version": client_version(),
                 "windows": {"metrics": [w["m_start"], w["end"]], "quality": [w["q_start"], w["end"]],
                             "changes": [w["c_start"], w["c_end"]]},
                 "queries": {}}
