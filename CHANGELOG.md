@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4 - 2026-10-26
+
+- G37 compares the 30-day CPA with the tCPA in the same unit. windows.json carries CPA in the account currency and the target is in micros, so G37 printed a CPA of 0.00 and about 100 percent apart on every account; an audit regenerated now can read pass where it read warning.
+- The brand SERP verdict in the leakage section reads the brand-serp.md table's verdict column, as the five mistakes already do. The notes under an all no-bid table no longer turn the verdict "mixed", which also sets the brand-negatives recommendation's confidence and drops its protect clause when nothing needs protecting. A file without a table still falls back to the word search.
+- The deep pass's first read (the account time zone) fails with pull's one-line error and writes nothing, instead of a traceback.
+- Help text for every misallocate and windows threshold flag.
+- Skills: gads-audit quotes the leakage figures as labelled lines, never a table; gads-precheck says ceiling.md is written only with a workspace and that the currency defaults to it.
 ## 0.2.3 - 2026-10-26
 
 - The bundled MCP definition moved from the root `.mcp.json` to `mcp/google-ads.json`, which plugin.json names. A root `.mcp.json` is also a project config for any session opened in the repository, in a worktree under it or in a folder below it. There the host loaded it as a plain `google-ads` server that never gets the plugin's `${user_config.*}` values, and suppressed the plugin's own server as a duplicate.

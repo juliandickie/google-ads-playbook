@@ -9,7 +9,7 @@ import enum, json
 from datetime import date, timedelta
 from pathlib import Path
 from . import io
-from .pull import API_VERSION, client_version, make_client, service, _window_end
+from .pull import API_VERSION, api_error, client_version, make_client, service, _window_end
 
 METRIC_DAYS = 90    # device, geo, landing page, conversion action volumes
 QUALITY_DAYS = 30   # keyword quality components
@@ -231,8 +231,15 @@ def run(customer_id, ws, run_date=None, client=None, names=None):
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n")
     return manifest
 
+TIMEZONE_QUERY = "SELECT customer.time_zone FROM customer"
+
 def _timezone(client, customer_id):
-    rows = _raw_rows(client, customer_id, "SELECT customer.time_zone FROM customer")
+    """The account time zone, read before any query. A failure here stops the pass with pull's one-line error
+    (the query, Google's message, the likely causes), never a traceback: nothing can be windowed without it."""
+    try:
+        rows = _raw_rows(client, customer_id, TIMEZONE_QUERY)
+    except Exception as e:  # GoogleAdsException, transport, or auth error from the API client
+        raise api_error(TIMEZONE_QUERY, e) from e
     if not rows:
         raise io.MissingInput(f"customer {customer_id} returned no customer row for the deep pass.")
     return rows[0].customer.time_zone

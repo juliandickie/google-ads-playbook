@@ -119,10 +119,10 @@ def cmd_misallocate(args):
 
 def register(sub, add_common):
     p = sub.add_parser("misallocate", help="search terms converting well but underfunded, and the reverse")
-    p.add_argument("--min-conversions", type=float, default=5)
-    p.add_argument("--win-cvr", type=float, default=0.20)
-    p.add_argument("--win-share", type=float, default=0.02)
-    p.add_argument("--lose-cvr", type=float, default=0.03)
-    p.add_argument("--lose-share", type=float, default=0.05)
+    p.add_argument("--min-conversions", type=float, default=5, help="a term needs at least this many conversions to be judged (default 5)")
+    p.add_argument("--win-cvr", type=float, default=0.20, help="a winner converts above this rate (default 0.20)")
+    p.add_argument("--win-share", type=float, default=0.02, help="a winner holds under this share of its campaign's cost (default 0.02)")
+    p.add_argument("--lose-cvr", type=float, default=0.03, help="a loser converts under this rate (default 0.03)")
+    p.add_argument("--lose-share", type=float, default=0.05, help="a loser holds over this share of its campaign's cost (default 0.05)")
     add_common(p)
     p.set_defaults(func=cmd_misallocate)

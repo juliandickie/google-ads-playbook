@@ -15,6 +15,13 @@ class CliHelpTests(unittest.TestCase):
         out = buf.getvalue()
         self.assertIn("leakage", out)
         self.assertIn("pull", out)
+    def test_every_calculator_threshold_explains_itself(self):
+        parser, sub = cli.build_parser()
+        cli.registry.register_all(sub, cli.add_common)
+        for name in ("misallocate", "windows"):
+            for action in sub.choices[name]._actions:
+                if action.option_strings and action.dest != "help":
+                    self.assertTrue(action.help, f"{name} {action.option_strings[0]} has no help text")
 
 if __name__ == "__main__":
     unittest.main()

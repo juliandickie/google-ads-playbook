@@ -140,11 +140,11 @@ def cmd_windows(args):
 
 def register(sub, add_common):
     p = sub.add_parser("windows", help="7, 14, 30-day scaling gate per campaign")
-    p.add_argument("--target-roas", type=float)
-    p.add_argument("--breakeven-roas", type=float)
+    p.add_argument("--target-roas", type=float, help="a campaign scales only at or above this ROAS in the 7, 14 and 30-day windows; default target_roas in gads.json")
+    p.add_argument("--breakeven-roas", type=float, help="under this ROAS in all three windows a campaign is marked cut; default breakeven_roas in gads.json")
     p.add_argument("--end-date", help="YYYY-MM-DD, default latest date in campaigns.csv")
-    p.add_argument("--tolerance", type=float, default=0.10)
-    p.add_argument("--min-conversions", type=float, default=5)
-    p.add_argument("--budget-limited", type=float, default=0.10)
+    p.add_argument("--tolerance", type=float, default=0.10, help="the largest ROAS drop against the prior window that still allows a scale, as a fraction (default 0.10)")
+    p.add_argument("--min-conversions", type=float, default=5, help="conversions over 30 days a campaign under break-even needs before it is marked cut (default 5)")
+    p.add_argument("--budget-limited", type=float, default=0.10, help="average 7-day search budget-lost impression share above which a campaign counts as budget-limited (default 0.10)")
     add_common(p)
     p.set_defaults(func=cmd_windows)

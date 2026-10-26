@@ -181,6 +181,13 @@ class RunTests(unittest.TestCase):
             deep.run("1234567890", d, run_date="2026-09-15", client=FakeClient(fail_on={"geographic_view"}), names=["geo_90d"])
             self.assertFalse((out / "geo_90d.json").exists())
             self.assertTrue((out / "geo_90d.error.txt").exists())
+    def test_a_failed_time_zone_read_is_one_clean_error_and_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(deep.io.MissingInput) as cm:
+                deep.run("1234567890", d, run_date="2026-09-15", client=FakeClient(fail_on={"customer"}))
+            self.assertIn("the customer query failed", str(cm.exception))
+            self.assertIn("Likely causes", str(cm.exception))
+            self.assertFalse((Path(d) / "raw").exists())
     def test_names_subset_runs_only_those(self):
         with tempfile.TemporaryDirectory() as d:
             m = deep.run("1234567890", d, run_date="2026-09-15", client=FakeClient(), names=["customer", "ads"])

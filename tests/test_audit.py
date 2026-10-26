@@ -458,6 +458,48 @@ class WordingTests(unittest.TestCase):
                     depth += (ch == "(") - (ch == ")"); deepest = max(deepest, depth)
                 self.assertLessEqual(deepest, 1, line)
 
+class TargetCpaTests(unittest.TestCase):
+    """G37: windows.json carries the 30-day CPA in the account currency, the tCPA is in micros."""
+    def run_with_cpa(self, cpa):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            w = ws / "runs" / RUN / "windows.json"
+            data = json.loads(w.read_text())
+            data["campaigns"][0]["windows"]["30"]["cur"]["cpa"] = cpa
+            w.write_text(json.dumps(data))
+            rep, _ = audit.run(ws, RUN)
+            return rep.controls["G37"]
+    def test_a_target_within_tolerance_passes(self):
+        verdict, note = self.run_with_cpa(8.5)
+        self.assertEqual(verdict, "pass")
+        self.assertIn("tCPA 8.00 against a 30-day CPA of 8.50", note)
+    def test_a_target_outside_tolerance_warns_with_the_real_cpa(self):
+        verdict, note = self.run_with_cpa(10.0)
+        self.assertEqual(verdict, "warning")
+        self.assertIn("against a 30-day CPA of 10.00, 25 percent apart", note)
+
+class BrandSerpVerdictTests(unittest.TestCase):
+    """The verdict comes from the table's verdict column; the notes under the table do not count."""
+    def run_with_serp(self, text):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            (ws / "runs" / "2026-09-05" / "brand-serp.md").write_text(text)
+            rep, out = audit.run(ws, RUN)
+            return rep, (out / "audit.md").read_text()
+    TABLE = "| phrase | country | rank | paid | verdict |\n|---|---|---|---|---|\n"
+    def test_an_all_no_bid_table_reads_no_bid_whatever_the_notes_say(self):
+        rep, text = self.run_with_serp(self.TABLE + "| example co | AU | 1 | none | no bid |\n\nNothing to protect today; if a rival bids, the verdict flips to protect.\n")
+        self.assertIn("verdict no bid, see", text)
+        brand = next(r for r in rep.recs if r["title"].startswith("Brand negatives"))
+        self.assertEqual(brand["Confidence"], "high")
+        self.assertNotIn("route those searches", brand["Change"])
+    def test_protect_and_no_bid_rows_read_mixed(self):
+        _, text = self.run_with_serp(self.TABLE + "| example co | AU | 3 | rival.com | protect |\n| example co | NZ | 1 | none | no bid |\n")
+        self.assertIn("verdict mixed, see", text)
+    def test_without_a_table_the_words_still_decide(self):
+        _, text = self.run_with_serp("# Brand SERP\n\nA rival bids on the brand everywhere, so protect it.\n")
+        self.assertIn("verdict protect, see", text)
+
 class FollowUpTests(unittest.TestCase):
     def test_a_later_readout_is_linked_and_a_same_day_one_is_not(self):
         with tempfile.TemporaryDirectory() as d:

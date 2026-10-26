@@ -23,7 +23,7 @@ The operator exports Keyword Planner ideas for the brand name, the category term
 ${CLAUDE_PLUGIN_ROOT}/bin/gads ceiling <planner.csv> --aov <AOV> --margin <fraction> --brand "<brand tokens>" --currency <code> [--workspace <ws>]
 ```
 
-Read `ceiling.md`. Present the brand and non-brand blocks separately, then the combined line, and repeat the sentence "this is a ceiling, not a forecast". Every rate used is a practitioner default; say that once.
+With `--workspace` it writes `runs/<date>/ceiling.md` and `--currency` defaults to the workspace currency; without a workspace it prints the same markdown and writes nothing, so read the output. Present the brand and non-brand blocks separately, then the combined line, and repeat the sentence "this is a ceiling, not a forecast". Every rate used is a practitioner default; say that once.
 
 ## Step 4 - the leak
 

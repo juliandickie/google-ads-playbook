@@ -58,6 +58,9 @@ Behaviour that differs from the original plan text, decided during the subagent-
 - A window windows.json does not carry reads "not available" in the audit, never as zeros (2026-10-26).
 - `gads normalise` writes or merges gads.json (2026-10-26): the campaign window from campaigns.csv's ISO dates, source ui, pulled_at; a search terms export drops `search_terms_window_start`, because the UI export carries no dates; every other key is kept. It writes only after the whole batch parses, like the exports.
 - `gads ceiling` takes its currency from gads.json when `--currency` is absent (2026-10-26).
+- G37 reads windows.json's 30-day CPA, which is in the account currency, times a million against the tCPA in micros (0.2.4, 2026-10-26). Before that it read 0.00 and about 100 percent apart on every account, so an audit regenerated after 0.2.4 can move G37 from warning to pass.
+- The brand SERP verdict comes from the brand-serp.md table's verdict column in the leakage section and the five mistakes alike (0.2.4): all protect reads protect, some reads mixed, none reads no bid. The word search over the whole file is the fallback for a file with no table. An audit regenerated after 0.2.4 can change the leakage section's verdict line and the brand-negatives recommendation's confidence and Change text.
+- The deep pass reads the account time zone first and stops with pull's one-line error, writing nothing, when that read fails (0.2.4); a rejected query after it still writes its error file and the pass carries on.
 - Report wording is tested (2026-10-26): `audit.count()` makes a count agree with its noun, a control note sits in one pair of brackets, no line ends in a space, and money in a recommendation names the currency.
 
 ## Bumping the API version
@@ -71,6 +74,8 @@ Plugin 0.2.3 on main (f8f91ee), tagged v0.2.3, pushed, and installed from the ou
 The bundled MCP was first observed working in-host on 2026-10-26, from a session opened outside the repository: customers_list_accessible_customers, a search_search on campaign names, and a search_search on the v26-only `customer.conversion_tracking_setting.effective_enablement_setting` all returned rows, so the server calls v26 (its pipx environment held google-ads 34.0.0). Every earlier "in-host" failure with `${user_config.adc_path}` came from sessions opened in this repository or its worktrees, where the root `.mcp.json` ran as a project server and the plugin's was suppressed; the plugin config values had also been unset until that day.
 
 After 0.2.3 was installed, the same three calls returned rows from a folder outside the repository, from the main checkout and from a worktree under `.claude/worktrees/`. Each session's debug log showed the plugin's server connecting, no "Suppressing plugin MCP server" line and no plain `google-ads` project server, so the move out of the root `.mcp.json` is verified inside the repository as well as outside it.
+
+0.2.4 followed the same day on main, tagged v0.2.4 and pushed: G37 compares the 30-day CPA in the right unit, the leakage section's brand SERP verdict reads the table's verdict column, the deep pass stops cleanly when its first read fails, and the misallocate and windows thresholds carry help text.
 
 A full read-only check of 0.2.2 ran the same day (every subcommand live against a production account into a scratch copy, the 2026-09-15 run regenerated line for line, every skill read against the code); the findings are in `docs/` (local only).
 
@@ -118,7 +123,6 @@ Tasks 1 to 13 of the plan plus the whole-branch final review and its fix wave ar
 
 ## Known gaps
 
-- G37 compares a 30-day CPA from windows.json, which is in the account currency, with a tCPA in micros, and prints the CPA through the micros formatter, so it reads "a 30-day CPA of 0.00" and about 100 percent apart on any account (found 2026-10-26, not fixed in 0.2.3; the fix changes the G37 verdict in existing audits). The brand SERP verdict in the leakage section is a word search over the whole of brand-serp.md, so a table that is all "no bid" reads "mixed" when the notes under it say "protect"; the five mistakes read the table's verdict column instead.
 - The deep pass has fixed windows (90, 30, 28 days) and file names that carry them; an operator who wants another window edits `deep.py` for now. The pass reads only ENABLED campaigns for criteria, negatives, ads, assets, audiences, goals, quality, landing pages, device and geo (settings cover ENABLED and PAUSED); a paused campaign's ads and negatives are not captured.
 - `gads audit` drafts from the files alone: rules that need a brand kit (competitor names, audience mismatch terms, landing page quality, offer calls) are the skill's to add, and a client whose evidence is thinner (no deep pass, no reconciliation) gets a shorter report with the gaps named rather than guessed. The executive version's asks are generic; the skill tailors them.
 

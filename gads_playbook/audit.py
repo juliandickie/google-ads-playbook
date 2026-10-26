@@ -501,8 +501,13 @@ def rule_leakage(rep, totals):
             + " ".join(L.get("assumptions", [])) + f" Source: {lk}.")
     serp_verdict = None
     if ev.brand_serp:
-        low = ev.brand_serp.lower()
-        serp_verdict = "protect" if "protect" in low and "no bid" not in low else ("mixed" if "protect" in low else "no bid")
+        rows = _serp_verdicts(ev.brand_serp)
+        if rows:  # the table's verdict column, never the notes under it
+            protect = sum(1 for v in rows if v.startswith("protect"))
+            serp_verdict = "protect" if protect == len(rows) else ("mixed" if protect else "no bid")
+        else:
+            low = ev.brand_serp.lower()
+            serp_verdict = "protect" if "protect" in low and "no bid" not in low else ("mixed" if "protect" in low else "no bid")
         rep.add(S, "Brand SERP check", f"{'from this run' if ev.brand_serp_from == ev.run_date else 'from the ' + ev.brand_serp_from + ' run (the check holds until the monthly recheck)'}, verdict {serp_verdict}, see {ev.link(f'runs/{ev.brand_serp_from}/brand-serp.md')}.")
     else:
         rep.add(S, "Brand SERP check", "not run for this run date; the brand-bidding rule cannot be applied without it.")
@@ -825,6 +830,7 @@ def _rule_structure(rep, totals, enabled, st, crit, W):
             tcpa = io.parse_number(s.get("campaign.maximize_conversions.target_cpa_micros")) or io.parse_number(s.get("campaign.target_cpa.target_cpa_micros"))
             cpa30 = ((w.get("windows") or {}).get("30") or {}).get("cur", {}).get("cpa")
             if tcpa and cpa30:
+                cpa30 *= 1_000_000  # windows.json carries CPA in the account currency, the target is in micros
                 gap = abs(cpa30 - tcpa) / tcpa
                 rep.control("G37", "pass" if gap <= TARGET_TOLERANCE else "warning", f"{n} tCPA {money(tcpa)} against a 30-day CPA of {money(cpa30)}" + ("" if gap <= TARGET_TOLERANCE else f", {pct(gap, 0)} apart"))
                 break
