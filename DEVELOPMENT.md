@@ -66,9 +66,11 @@ Do this once a year at the latest and well before the pinned version's sunset (h
 
 ## State at 2026-10-26
 
-Plugin 0.2.3 committed and tagged v0.2.3 on its worktree branch, waiting for Julian's go to merge to main and push: the MCP definition moved out of the root `.mcp.json`, leakage withholds the true new-customer ROAS under a value coverage floor, `gads audit` writes the five mistakes and the Follow-up line and says when the 30-day read is unavailable, `gads normalise` writes gads.json, `gads ceiling` takes the workspace currency, and the generated reports' wording was tidied.
+Plugin 0.2.3 on main (f8f91ee), tagged v0.2.3, pushed, and installed from the outfit catalog: the MCP definition moved out of the root `.mcp.json`, leakage withholds the true new-customer ROAS under a value coverage floor, `gads audit` writes the five mistakes and the Follow-up line and says when the 30-day read is unavailable, `gads normalise` writes gads.json, `gads ceiling` takes the workspace currency, and the generated reports' wording was tidied.
 
 The bundled MCP was first observed working in-host on 2026-10-26, from a session opened outside the repository: customers_list_accessible_customers, a search_search on campaign names, and a search_search on the v26-only `customer.conversion_tracking_setting.effective_enablement_setting` all returned rows, so the server calls v26 (its pipx environment held google-ads 34.0.0). Every earlier "in-host" failure with `${user_config.adc_path}` came from sessions opened in this repository or its worktrees, where the root `.mcp.json` ran as a project server and the plugin's was suppressed; the plugin config values had also been unset until that day.
+
+After 0.2.3 was installed, the same three calls returned rows from a folder outside the repository, from the main checkout and from a worktree under `.claude/worktrees/`. Each session's debug log showed the plugin's server connecting, no "Suppressing plugin MCP server" line and no plain `google-ads` project server, so the move out of the root `.mcp.json` is verified inside the repository as well as outside it.
 
 A full read-only check of 0.2.2 ran the same day (every subcommand live against a production account into a scratch copy, the 2026-09-15 run regenerated line for line, every skill read against the code); the findings are in `docs/` (local only).
 
