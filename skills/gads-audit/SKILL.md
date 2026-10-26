@@ -16,7 +16,7 @@ ${CLAUDE_PLUGIN_ROOT}/bin/gads windows --workspace <ws> --run-date <date>
 ${CLAUDE_PLUGIN_ROOT}/bin/gads audit --workspace <ws> --run-date <date> --executive
 ```
 
-`gads audit` reads everything the workspace holds for that run date (the exports, the three calculator files, the deep pass, the brand SERP check and the reconciliation from this run or the latest earlier one) and writes `runs/<date>/audit.md`, `audit.json` and `audit-executive.md`. Its "Missing evidence" section is the list of what to produce next (a SERP check, a reconciliation, a deep pass); every control a missing source would have decided reads "no evidence".
+`gads audit` reads everything the workspace holds for that run date (the exports, the three calculator files, the deep pass, the brand SERP check and the reconciliation from this run or the latest earlier one) and writes `runs/<date>/audit.md`, `audit.json` and `audit-executive.md`. It also answers the library's five mistakes from those files and links the newest readout filed after the run date as a Follow-up line. Its "Missing evidence" section is the list of what to produce next (a SERP check, a reconciliation, a deep pass); every control a missing source would have decided reads "no evidence".
 
 Then review in `runs/<date>/audit-review.md`, never in audit.md (every run rewrites it). Every recommendation in audit.md is a rule-drafted draft. Read each against the evidence it cites and write the review file:
 
@@ -45,7 +45,7 @@ Prompts are in `${CLAUDE_PLUGIN_ROOT}/references/10-prompts.md` Part 1. For each
 
 ## The deeper pass
 
-When pro-marketing-ads is installed, run `/ads audit` on the same exports for the scored 80-check report and reconcile: anything it flags that the six audits did not gets its own line. When it is not installed, walk `06-google-audit-checklist.md` by section and mark each control pass, fail, or no evidence.
+`gads audit` already walks `06-google-audit-checklist.md` by section and marks every control pass, fail, warning, partial or no evidence. When claude-ads is installed, run `/ads audit` on the same exports for a second, scored 80-check opinion and reconcile: anything it flags that audit.md does not gets an added recommendation in audit-review.md.
 
 ## Report shape
 
@@ -55,5 +55,5 @@ One section per audit, each ending in recommendations in the contract's format (
 - One labelled fact per line, `**Label:** value`, with a blank line between lines. Findings, flags, per-campaign roles and the checklist walk use the same shape (`**G47:** fail (...)`, one control per line under a `### section` heading).
 - No bullet lists and no pipe tables in the report body. Lettered sub-points become their own labelled lines (`**Change (a):** ...`).
 - Every file cited is a clickable link, not a bare path: workspace files as absolute `file://` links (the operator reads the report outside the repo), playbook references as GitHub blob URLs. A link must resolve on disk; check every target before shipping.
-- A `## Data used` block at the top links every source, and a `**Follow-up:**` line points at the latest readout when one exists.
-- Dates as YYYY-MM-DD. Then the five mistakes as a yes or no table, one row each: no branded campaign (answer from `brand-serp.md`: it is a yes only where a protect verdict has no campaign behind it; first organically with no competitor ads is "not needed today", not a mistake); traffic sent to the homepage instead of a matched landing page; PMax left to run wild with brand allowed everywhere; scaling before there is data; the product feed ignored. The full text is the section "The 5 Mistakes These Prompts Keep Finding" in the captured library (`~/code/google-ads-audit-prompt-library/100M-GADs-Audit-Prompt-Library.md`) when it is on this machine. Close with the three changes that move new-customer ROAS most, in order.
+- A `## Data used` block at the top links every source, and a `**Follow-up:**` line points at the latest readout when one exists. `gads audit` writes both.
+- Dates as YYYY-MM-DD. Then the five mistakes, one labelled line each with a verdict and the file it rests on, which `gads audit` writes: no branded campaign (from `brand-serp.md`: a yes only where a protect verdict has no brand campaign behind it; first organically with no competitor ads is "not needed today", not a mistake); traffic sent to the homepage instead of a matched landing page (`landing_pages_90d.json`); PMax left to run wild with brand allowed everywhere (the PMax campaigns as leakage classifies them); scaling before there is data (budget changes in `change_events_28d.json` against the gate in `windows.md`); the product feed ignored (the feed file and `feedscore.json`). Read each verdict against its evidence; where the files are not the whole story, say so in a `## Caveat` line in audit-review.md. The full text is the section "The 5 Mistakes These Prompts Keep Finding" in the captured library (`~/code/google-ads-audit-prompt-library/100M-GADs-Audit-Prompt-Library.md`) when it is on this machine. Close with the three changes that move new-customer ROAS most, in order.

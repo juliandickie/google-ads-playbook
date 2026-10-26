@@ -105,7 +105,7 @@ def require(path, columns):
 def load_workspace(ws):
     p = Path(ws) / "gads.json"
     if not p.exists():
-        raise MissingInput(f"no gads.json in {ws}. Run gads setup (or gads pull) first.")
+        raise MissingInput(f"no gads.json in {ws}. Run /gads setup (or gads pull, or gads normalise on UI exports) first.")
     return json.loads(p.read_text())
 
 def save_workspace(ws, data):

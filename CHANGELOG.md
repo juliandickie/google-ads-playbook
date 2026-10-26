@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.3 - 2026-10-26
+
+- The bundled MCP definition moved from the root `.mcp.json` to `mcp/google-ads.json`, which plugin.json names. A root `.mcp.json` is also a project config for any session opened in the repository, in a worktree under it or in a folder below it. There the host loaded it as a plain `google-ads` server that never gets the plugin's `${user_config.*}` values, and suppressed the plugin's own server as a duplicate.
+- leakage reports the search-term value coverage (term value over campaign value in the campaigns the true ROAS covers) and reads true new-customer ROAS as n/a under a 25 percent floor (`leakage.MIN_TERM_VALUE_COVERAGE`), instead of a 0.00x when the visible terms carry no value. The audit and the executive version state the coverage beside the ratio, or say the new-customer return cannot be read from the window.
+- `gads audit` answers the library's five mistakes from the files (brand SERP check, landing pages, PMax classification, budget changes against the gate, feed score) and links the newest later readout as a Follow-up line, both of which the gads-audit skill already asked for.
+- `gads audit` says the 30-day read is not available when windows.json lacks it (a pull under 60 days), instead of printing zeros.
+- `gads normalise` writes or merges a minimal gads.json (the campaign window, source ui), so a UI-only workspace passes `gads validate` and reaches the calculators.
+- `gads ceiling` takes its currency from the workspace when `--currency` is absent.
+- Report wording: counts agree with their nouns ("1 keyword", "1 large list", "1 non-brand campaign"), control notes never nest brackets (G14, G43, G37), no line ends in a space, and the brand-negatives Impact line names the currency.
+- Skills: gads-setup names the folder cause of a `${user_config...}` MCP error and the keys a UI-only gads.json still needs; gads-audit points at claude-ads for the second opinion; the gads contract's rules sit under Rules again.
 ## 0.2.2 - 2026-10-23
 
 - Google Ads API v26: the deep pass reads the unified enhanced conversions setting (`enablement_setting`, `effective_enablement_setting`) in place of `enhanced_conversions_for_leads_enabled`, which v26 removed and which broke the `customer` query; the audit's G43 reads it and still reads the old flag in earlier deep passes.

@@ -370,6 +370,148 @@ class ReviewTests(unittest.TestCase):
         three = audit.three_changes(self.rep)
         self.assertEqual(len(three), 3)
 
+class FiveMistakesTests(unittest.TestCase):
+    def run_ws(self, change=None):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            if change:
+                change(ws)
+            rep, out = audit.run(ws, RUN, executive=True)
+            return rep, (out / "audit.md").read_text(), json.loads((out / "audit.json").read_text())
+    def verdicts(self, rep):
+        return {m: v for m, v, _ in rep.mistakes}
+    def test_each_mistake_is_answered_from_the_files(self):
+        rep, text, j = self.run_ws()
+        v = self.verdicts(rep)
+        self.assertEqual(v["No branded campaign"], "not needed today")       # the earlier SERP check says no bid, no brand campaign
+        self.assertEqual(v["Sending traffic to the homepage"], "yes")        # 10 of 100 landing-page spend on the homepage
+        self.assertEqual(v["Letting PMax run wild"], "no")                   # no PMax campaign
+        self.assertEqual(v["Scaling before you have data"], "no")            # no budget change events
+        self.assertEqual(v["Ignoring your product feed"], "not applicable")
+        self.assertIn("## The five mistakes these prompts keep finding", text)
+        self.assertIn("**1. No branded campaign:** not needed today (no protect verdict among the 1 phrase checked on 2026-09-05, so the brand ranks first", text)
+        self.assertLess(text.index("## The five mistakes"), text.index("## The three changes"))
+        self.assertEqual([m["mistake"] for m in j["mistakes"]], [m for m, _, _ in rep.mistakes])
+    def test_landing_pages_absent_or_empty(self):
+        rep, _, _ = self.run_ws(lambda ws: (ws / "raw" / f"deep-{DEEP}" / "landing_pages_90d.json").write_text("[]"))
+        self.assertEqual(self.verdicts(rep)["Sending traffic to the homepage"], "no")
+        rep, _, _ = self.run_ws(lambda ws: (ws / "raw" / f"deep-{DEEP}" / "landing_pages_90d.json").unlink())
+        self.assertEqual(self.verdicts(rep)["Sending traffic to the homepage"], "no evidence")
+    def test_protect_verdict_without_a_brand_campaign_is_the_mistake(self):
+        def protect(ws):
+            (ws / "runs" / "2026-09-05" / "brand-serp.md").write_text("| phrase | country | rank | paid | verdict |\n|---|---|---|---|---|\n| example co | AU | 3 | rival.com | protect |\n| example co | NZ | 1 | none | no bid |\n")
+        rep, text, _ = self.run_ws(protect)
+        self.assertEqual(self.verdicts(rep)["No branded campaign"], "yes")
+        self.assertIn("1 of the 2 phrases checked on 2026-09-05 has a protect verdict and no brand campaign covers it", text)
+    def test_budget_changes_with_nothing_cleared_by_the_gate(self):
+        def budget(ws):
+            p = ws / "raw" / f"deep-{DEEP}" / "change_events_28d.json"
+            p.write_text(json.dumps([{"change_event.change_resource_type": "CAMPAIGN_BUDGET", "change_event.user_email": "x@example.com", "change_event.change_date_time": "2026-09-10 10:00:00"}]))
+            w = ws / "runs" / RUN / "windows.json"
+            d = json.loads(w.read_text())
+            for c in d["campaigns"]:
+                c["verdict"] = "hold"
+            w.write_text(json.dumps(d))
+        rep, _, _ = self.run_ws(budget)
+        self.assertEqual(self.verdicts(rep)["Scaling before you have data"], "yes")
+    def test_capture_only_pmax_and_an_unscored_feed(self):
+        def pmax(ws):
+            rows = audit.io.read_csv(ws / "exports" / "campaigns.csv")
+            rows.append(camp_row("PMax | Capture | AU", "2026-09-01", 20_000_000, 2, 100.0, channel="PERFORMANCE_MAX", strategy="MAXIMIZE_CONVERSION_VALUE", cid=3))
+            write_csv(ws / "exports" / "campaigns.csv", rows, CAMP_COLS)
+            lj = ws / "runs" / RUN / "leakage.json"
+            d = json.loads(lj.read_text())
+            d["per_campaign"].append({"campaign": "PMax | Capture | AU", "kind": "pmax-capture", "cost": 20_000_000, "value": 100.0, "branded_cost": 20_000_000, "branded_value": 100.0, "nonbranded_cost": 0, "nonbranded_value": 0.0})
+            lj.write_text(json.dumps(d))
+            (ws / "feed.tsv").write_text("id\ttitle\n")
+        rep, _, _ = self.run_ws(pmax)
+        v = self.verdicts(rep)
+        self.assertEqual(v["Letting PMax run wild"], "yes")
+        self.assertEqual(v["Ignoring your product feed"], "no evidence")   # feed present, feedscore not run
+        def scored(ws):
+            pmax(ws)
+            (ws / "runs" / RUN / "feedscore.json").write_text(json.dumps({"rebuild": ["A", "B"], "scored": 5}))
+        rep, text, _ = self.run_ws(scored)
+        self.assertEqual(self.verdicts(rep)["Ignoring your product feed"], "yes")
+        self.assertIn("2 of 5 products score under 7", text)
+
+class WordingTests(unittest.TestCase):
+    def test_counts_agree_and_no_brackets_nest_or_lines_trail(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            (ws / "raw" / f"deep-{DEEP}" / "customer.json").write_text(json.dumps([{"customer.auto_tagging_enabled": True, "customer.conversion_tracking_setting.effective_enablement_setting": "ON"}]))
+            rep, out = audit.run(ws, RUN, executive=True)
+            text = (out / "audit.md").read_text()
+        self.assertIn("Branded searches reach 1 non-brand campaign: ", text)
+        self.assertIn("(1 large list missing from some campaigns)", text)
+        self.assertIn("(1 negative list; the checklist expects themed", text)
+        self.assertIn("(1 keyword at 3 or below)", text)
+        self.assertIn("(1 campaign pair competes in the same auctions)", text)
+        self.assertIn("(0 changes in 28 days)", text)
+        self.assertIn("**Impact:** about AUD 5.00 per window back", text)   # the executive quotes this Impact line when the rec is in its top three
+        self.assertEqual(audit.count(1, "keyword"), "1 keyword")
+        for line in text.splitlines():
+            self.assertEqual(line, line.rstrip(), line)
+            if line.startswith("**G"):   # control notes sit in one pair of brackets, never two
+                depth = deepest = 0
+                for ch in line:
+                    depth += (ch == "(") - (ch == ")"); deepest = max(deepest, depth)
+                self.assertLessEqual(deepest, 1, line)
+
+class FollowUpTests(unittest.TestCase):
+    def test_a_later_readout_is_linked_and_a_same_day_one_is_not(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            (ws / "runs" / RUN / "readout.md").write_text("# Readout against the earlier audit\n")
+            (ws / "runs" / "provisional-2026-12-01").mkdir()
+            (ws / "runs" / "provisional-2026-12-01" / "readout.md").write_text("# not a dated run\n")
+            _, out = audit.run(ws, RUN)
+            self.assertNotIn("**Follow-up:**", (out / "audit.md").read_text())
+            (ws / "runs" / "2026-10-15").mkdir()
+            (ws / "runs" / "2026-10-15" / "readout.md").write_text("# Readout against the 2026-09-15 audit\n")
+            _, out = audit.run(ws, RUN)
+            text = (out / "audit.md").read_text()
+            self.assertIn("**Follow-up:** the readout of 2026-10-15, [readout.md](file://", text)
+            self.assertIn("runs/2026-10-15/readout.md", text)
+
+class ShortPullTests(unittest.TestCase):
+    def test_a_missing_30_day_window_reads_not_available(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            w = ws / "runs" / RUN / "windows.json"
+            data = json.loads(w.read_text())
+            data["account"]["windows"] = {"7": {"cur": {"cost": 10_000_000, "conversions": 1, "value": 10.0, "roas": 1.0, "cpa": 10.0}}}
+            data["unavailable"] = [14, 30]
+            w.write_text(json.dumps(data))
+            rep, out = audit.run(ws, RUN, executive=True)
+            text = (out / "audit.md").read_text()
+            self.assertIn("**Last 30 days:** not available, windows.md lists the 30-day window as unavailable", text)
+            self.assertNotIn("cost 0.00, 0.0 conversions", text)
+            self.assertNotIn("The last 30 days", (out / "audit-executive.md").read_text())
+
+class ValueCoverageTests(unittest.TestCase):
+    def run_with(self, account):
+        with tempfile.TemporaryDirectory() as d:
+            ws = full_ws(d)
+            lj = ws / "runs" / RUN / "leakage.json"
+            data = json.loads(lj.read_text()); data["account"].update(account); lj.write_text(json.dumps(data))
+            _, out = audit.run(ws, RUN, executive=True)
+            return (out / "audit.md").read_text(), (out / "audit-executive.md").read_text()
+    def test_under_the_floor_reads_n_a_in_both_reports(self):
+        text, exe = self.run_with({"true_new_customer_roas": None, "term_value_coverage": 0.0, "term_value_coverage_floor": 0.25})
+        self.assertIn("**True new-customer ROAS (branded terms stripped out of every campaign):** n/a (under the value coverage floor)", text)
+        self.assertIn("**Search-term value coverage:** 0.0 percent", text)
+        self.assertIn("**New-customer return:** not measurable from this window, because search terms show only 0.0 percent", exe)
+        self.assertNotIn("0.00x once branded", exe)
+    def test_above_the_floor_states_the_coverage(self):
+        text, exe = self.run_with({"term_value_coverage": 0.4, "term_value_coverage_floor": 0.25})
+        self.assertIn("**Search-term value coverage:** 40.0 percent", text)
+        self.assertIn("read on the 40 percent of tracked value that search terms show", exe)
+    def test_leakage_json_from_before_the_coverage_reads_as_before(self):
+        text, exe = self.run_with({})
+        self.assertNotIn("Search-term value coverage", text)
+        self.assertNotIn("of tracked value that search terms show", exe)
+
 class CliTests(unittest.TestCase):
     def test_audit_subcommand(self):
         with tempfile.TemporaryDirectory() as d:

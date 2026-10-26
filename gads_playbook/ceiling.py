@@ -65,16 +65,17 @@ def compute(rows, brand, aov, margin, brand_ctr=0.20, brand_cvr=0.10, nb_ctr=0.0
                                                  "roas": (total_rev / total_media) if total_media else None}, "assumptions": assumptions}
 
 def render_md(result, currency=""):
+    def amt(x):
+        return f"{currency} {x:,.0f}".strip()
     def row(name, blk):
         return {"block": name, "volume": f"{blk['volume']:,}", "clicks": f"{blk['clicks']:,.0f}", "purchases": f"{blk['purchases']:,.0f}",
-                "revenue": f"{currency} {blk['revenue']:,.0f}".strip(), "cpc": f"{blk['cpc']:.2f}", "media": f"{currency} {blk['media_cost']:,.0f}".strip(),
-                "profit": f"{currency} {blk['profit']:,.0f}".strip()}
+                "revenue": amt(blk['revenue']), "cpc": f"{blk['cpc']:.2f}", "media": amt(blk['media_cost']), "profit": amt(blk['profit'])}
     t = result["total"]
     lines = ["# Revenue ceiling", "",
              render.table([row("Brand", result["brand"]), row("Non-brand", result["nonbrand"])],
                           ["block", "volume", "clicks", "purchases", "revenue", "cpc", "media", "profit"],
                           ["Block", "Monthly volume", "Clicks", "Purchases", "Revenue", "CPC", "Media cost", "Profit"]), "",
-             f"Combined monthly revenue potential {currency} {t['revenue']:,.0f}, media cost {currency} {t['media_cost']:,.0f}, gross profit {currency} {t['profit']:,.0f}, blended ROAS {render.ratio(t['roas'])}.",
+             f"Combined monthly revenue potential {amt(t['revenue'])}, media cost {amt(t['media_cost'])}, gross profit {amt(t['profit'])}, blended ROAS {render.ratio(t['roas'])}.",
              "", "This is a ceiling, not a forecast. Replace the assumed rates with the account's own history as soon as it exists.", "",
              "## Assumptions", ""] + [f"- {a}" for a in result["assumptions"]] + ["", "## Keywords by block", "",
              "Brand: " + ", ".join(result["brand"]["keywords"]), "", "Non-brand: " + ", ".join(result["nonbrand"]["keywords"])]
@@ -95,8 +96,9 @@ def cmd_ceiling(args):
         tokens = io.load_workspace(ws).get("brand_tokens") or []
     if not tokens:
         raise io.MissingInput("no brand tokens. Pass --brand 'Name,Alt name' or a workspace with brand_tokens.")
+    currency = args.currency or (io.load_workspace(ws).get("currency", "") if ws is not None and (ws / "gads.json").exists() else "")
     result = compute(rows, Brand(tokens), args.aov, args.margin, args.brand_ctr, args.brand_cvr, args.nonbrand_ctr, args.nonbrand_cvr, args.brand_cpc, args.nonbrand_cpc)
-    md = render_md(result, args.currency)
+    md = render_md(result, currency)
     if ws is not None:
         out = io.run_dir(ws, args.run_date)
         (out / "ceiling.md").write_text(md)
@@ -112,7 +114,7 @@ def register(sub, add_common):
     p.add_argument("--aov", type=float, required=True)
     p.add_argument("--margin", type=float, required=True, help="gross margin as a fraction, e.g. 0.6")
     p.add_argument("--brand", help="comma-separated brand tokens; default from the workspace")
-    p.add_argument("--currency", default="")
+    p.add_argument("--currency", default="", help="currency code for the money columns; default the workspace currency")
     p.add_argument("--brand-ctr", type=float, default=0.20)
     p.add_argument("--brand-cvr", type=float, default=0.10)
     p.add_argument("--nonbrand-ctr", type=float, default=0.04)

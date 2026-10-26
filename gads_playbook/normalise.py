@@ -1,5 +1,6 @@
 """Detect Google Ads UI exports and map them to the canonical schema (spec section 6.1)."""
 import csv, re, shutil
+from datetime import date
 from pathlib import Path
 from . import io, schema
 
@@ -237,7 +238,23 @@ def normalise_into_workspace(paths, ws):
         if raw.resolve() != p.resolve():
             shutil.copy2(p, raw)
         written[report_type] = out
+    _merge_workspace(ws, {t: rows for _, t, rows in parsed})
     return written
+
+def _merge_workspace(ws, rows_by_type):
+    """Write or merge gads.json so validate and the calculators run on a UI-only workspace: the campaign window
+    from campaigns.csv dates, source ui, pulled_at today. Every other key (brand tokens, targets, currency) is kept."""
+    try:
+        data = io.load_workspace(ws)
+    except io.MissingInput:
+        data = {}
+    days = sorted(r["segments.date"] for r in rows_by_type.get("campaigns", []) if re.match(r"^\d{4}-\d{2}-\d{2}$", r.get("segments.date") or ""))
+    if days:
+        data["window_start"], data["window_end"] = days[0], days[-1]
+    if "search_terms" in rows_by_type:
+        data.pop("search_terms_window_start", None)  # a UI search terms export carries no dates, so its window is unknown
+    data.update({"source": "ui", "pulled_at": date.today().isoformat()})
+    io.save_workspace(ws, data)
 
 def _resolve_paths(raw_paths):
     """Expand each path argument into concrete files, failing loud instead of a silent

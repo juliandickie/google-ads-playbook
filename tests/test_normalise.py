@@ -155,6 +155,37 @@ class MixedFolderTests(unittest.TestCase):
                 normalise.normalise_into_workspace([src / "campaign_report.csv", src / "unknown_report.csv"], ws)
             self.assertFalse((ws / "exports").exists() and any((ws / "exports").iterdir()))
             self.assertFalse((ws / "raw").exists() and any((ws / "raw").iterdir()))
+            self.assertFalse((ws / "gads.json").exists())
+
+class WorkspaceFileTests(unittest.TestCase):
+    def test_a_ui_only_workspace_gets_a_gads_json_that_validate_accepts(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d) / "ws"
+            normalise.normalise_into_workspace([FIX / "campaign_report.csv", FIX / "search_terms_report.csv"], ws)
+            data = io.load_workspace(ws)
+            days = sorted(r["segments.date"] for r in io.read_csv(ws / "exports" / "campaigns.csv"))
+            self.assertEqual((data["window_start"], data["window_end"]), (days[0], days[-1]))
+            self.assertEqual(data["source"], "ui")
+            self.assertIn("pulled_at", data)
+            with contextlib.redirect_stdout(StringIO()) as out:
+                self.assertEqual(cli_main(["validate", "--workspace", str(ws)]), 0)
+            self.assertIn("campaigns.csv: 6 rows", out.getvalue())
+    def test_merge_keeps_the_operator_keys_and_drops_the_unknown_terms_window(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d) / "ws"
+            io.save_workspace(ws, {"brand_tokens": ["NordVital"], "target_roas": 4.0, "currency": "AUD",
+                                   "window_start": "2026-01-01", "window_end": "2026-01-31", "search_terms_window_start": "2025-12-01"})
+            normalise.normalise_into_workspace([FIX / "campaign_report.csv", FIX / "search_terms_report.csv"], ws)
+            data = io.load_workspace(ws)
+            self.assertEqual((data["brand_tokens"], data["target_roas"], data["currency"]), (["NordVital"], 4.0, "AUD"))
+            self.assertNotEqual(data["window_start"], "2026-01-01")
+            self.assertNotIn("search_terms_window_start", data)
+    def test_without_campaigns_the_window_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as d:
+            ws = Path(d) / "ws"
+            io.save_workspace(ws, {"window_start": "2026-01-01", "window_end": "2026-01-31"})
+            normalise.normalise_into_workspace([FIX / "keyword_report.csv"], ws)
+            self.assertEqual(io.load_workspace(ws)["window_start"], "2026-01-01")
 
 class CliTests(unittest.TestCase):
     def test_unknown_report_via_cli_exits_2_and_writes_nothing(self):

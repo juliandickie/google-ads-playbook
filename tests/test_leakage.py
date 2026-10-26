@@ -64,6 +64,34 @@ class LeakageTests(unittest.TestCase):
             with contextlib.redirect_stderr(StringIO()):
                 self.assertEqual(main(["leakage", "--workspace", str(ws), "--run-date", "2026-09-04"]), 2)
 
+class ValueCoverageTests(unittest.TestCase):
+    def setUp(self):
+        self.c = io.read_csv(WS / "exports" / "campaigns.csv")
+        self.t = io.read_csv(WS / "exports" / "search_terms.csv")
+        self.k = io.read_csv(WS / "exports" / "keywords.csv")
+        self.b = Brand(["NordVital"])
+    def test_coverage_is_reported_and_the_ratio_stands_above_the_floor(self):
+        a = leakage.compute(self.c, self.t, self.b, self.k)["account"]
+        # the fixture's terms carry more value than its campaigns (2.5x), so coverage is not capped at 1
+        self.assertGreaterEqual(a["term_value_coverage"], leakage.MIN_TERM_VALUE_COVERAGE)
+        self.assertIsNotNone(a["true_new_customer_roas"])
+        self.assertEqual(a["term_value_coverage_floor"], leakage.MIN_TERM_VALUE_COVERAGE)
+    def test_terms_without_value_read_n_a_not_zero(self):
+        terms = [dict(r, **{"metrics.conversions_value": "0"}) for r in self.t]
+        r = leakage.compute(self.c, terms, self.b, self.k)
+        a = r["account"]
+        # PMax scaling counts whole as non-branded, so coverage is its share of the value, under the floor here
+        self.assertLess(a["term_value_coverage"], leakage.MIN_TERM_VALUE_COVERAGE)
+        self.assertIsNone(a["true_new_customer_roas"])
+        self.assertGreater(a["true_new_customer_cost"], 0)   # the raw sums stay for anyone who wants them
+        self.assertTrue(any("reads n/a" in s for s in r["assumptions"]))
+        md = leakage.render_md(r, "AUD")
+        self.assertIn("n/a (under the value coverage floor)", md)
+        self.assertIn("Search-term value coverage", md)
+    def test_floor_is_a_parameter(self):
+        a = leakage.compute(self.c, self.t, self.b, self.k, min_value_coverage=10.0)["account"]
+        self.assertIsNone(a["true_new_customer_roas"])
+
 class WindowTests(unittest.TestCase):
     def setUp(self):
         self.c = io.read_csv(WS / "exports" / "campaigns.csv")

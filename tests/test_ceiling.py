@@ -73,6 +73,19 @@ class WorkspaceResolutionTests(unittest.TestCase):
             md_path = ws_path / "runs" / "2026-09-04" / "ceiling.md"
             self.assertTrue(md_path.exists())
             self.assertIn("Brand: nordvital", md_path.read_text())
+    def test_currency_defaults_to_the_workspace_and_the_flag_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ws_path = Path(tmp) / "ws"
+            shutil.copytree(WS, ws_path)
+            cur = io.load_workspace(ws_path)["currency"]
+            with contextlib.redirect_stdout(iomod.StringIO()):
+                self.assertEqual(cli.main(["ceiling", str(KP), "--aov", "88", "--margin", "0.6", "--workspace", str(ws_path), "--run-date", "a"]), 0)
+                self.assertEqual(cli.main(["ceiling", str(KP), "--aov", "88", "--margin", "0.6", "--currency", "XYZ", "--workspace", str(ws_path), "--run-date", "b"]), 0)
+            self.assertIn(f"revenue potential {cur} ", (ws_path / "runs" / "a" / "ceiling.md").read_text())
+            self.assertIn("revenue potential XYZ ", (ws_path / "runs" / "b" / "ceiling.md").read_text())
+    def test_no_currency_leaves_no_double_space(self):
+        md = ceiling.render_md(ceiling.compute(io.read_csv(KP), Brand(["NordVital"]), aov=88.0, margin=0.6))
+        self.assertNotIn("  ", md.split("## Assumptions")[0])
     def test_no_workspace_prints_markdown_and_writes_nothing(self):
         with mock.patch.dict(os.environ, {"GADS_WORKSPACE": ""}):
             buf = iomod.StringIO()

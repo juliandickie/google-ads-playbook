@@ -30,7 +30,7 @@ Or from the outfit or loadout catalogs once added: `/plugin install google-ads-p
 4. Set the plugin config (`/plugin` settings): GCP project id, MCC id, and the absolute path to `adc.json`.
 5. `gads accounts --login-customer <mcc id>` should list your clients. Then `/gads setup`.
 
-No API access? Export from the Google Ads UI and run `gads normalise`. Everything else works the same.
+No API access? Export from the Google Ads UI and run `gads normalise`. It writes the exports and a minimal gads.json; add the account id, currency and time zone to it, then everything else works the same.
 
 ## Workspace
 
@@ -38,7 +38,7 @@ No API access? Export from the Google Ads UI and run `gads normalise`. Everythin
 
 ## The scripts
 
-`bin/gads` with subcommands `validate`, `normalise`, `leakage`, `misallocate`, `windows`, `feedscore`, `ceiling`, `bundle`, `auth`, `accounts`, `pull`, `audit`. Stdlib Python except the last three, which run under `uv` with the Google Ads client. Every threshold is a flag; the defaults are the playbook's practitioner numbers, meant to be replaced by the account's own history after 30 days.
+`bin/gads` with subcommands `validate`, `normalise`, `leakage`, `misallocate`, `windows`, `feedscore`, `ceiling`, `bundle`, `auth`, `accounts`, `pull`, `audit`. Stdlib Python except `auth`, `accounts` and `pull`, which run under `uv` with the Google Ads client. Every calculator threshold is a flag, except the leakage value coverage floor and the audit writer's thresholds, which are module constants; the defaults are the playbook's practitioner numbers, meant to be replaced by the account's own history after 30 days.
 
 `gads pull` defaults to 180 days for both campaigns and search terms, so leakage and misallocate read one window; pass `--days` and `--search-terms-days` to change either (both calculators say which windows they used when they differ). `/gads manage` pulls 70 days on purpose, enough for the 30-versus-prior-30 gate with slack.
 

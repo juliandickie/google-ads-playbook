@@ -15,8 +15,11 @@ def _int(v):
 SEARCH_LIKE_CHANNELS = ("SEARCH", "SHOPPING", "")
 SEARCH_KINDS = ("brand", "nonbrand")
 TRUE_ROAS_EXCLUDED_KINDS = ("pmax-unknown", "other-channel", "terms-only")
+# True new-customer ROAS reads only search-term rows; when they carry less than this share of the tracked
+# value in the campaigns it covers, the ratio says nothing about the rest, so it reads n/a. Edit here to change.
+MIN_TERM_VALUE_COVERAGE = 0.25
 
-def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=None):
+def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=None, min_value_coverage=MIN_TERM_VALUE_COVERAGE):
     windows = windows or {}
     campaign_start, campaign_end = windows.get("window_start") or "", windows.get("window_end") or ""
     search_terms_start = windows.get("search_terms_window_start") or ""
@@ -109,6 +112,14 @@ def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=Non
     nb_branded_value = sum(p["branded_value"] for p in nb_camps)
     true_cost = sum(p["nonbranded_cost"] for p in per if p["kind"] not in TRUE_ROAS_EXCLUDED_KINDS)
     true_value = sum(p["nonbranded_value"] for p in per if p["kind"] not in TRUE_ROAS_EXCLUDED_KINDS)
+    scope = [p for p in per if p["kind"] not in TRUE_ROAS_EXCLUDED_KINDS]
+    scope_value = sum(p["value"] for p in scope)
+    coverage = (sum(p["branded_value"] + p["nonbranded_value"] for p in scope) / scope_value) if scope_value else None
+    true_roas = (true_value / io.micros_to_money(true_cost)) if true_cost else None
+    if coverage is not None and coverage < min_value_coverage:
+        true_roas = None
+        assumptions.append(f"True new-customer ROAS reads n/a: search terms carry {render.pct(coverage)} of the tracked value in the campaigns it covers, "
+                           f"under the {render.pct(min_value_coverage, 0)} floor, so stripping branded terms out says nothing about the rest.")
     reverse = [p for p in per if p["kind"] == "brand"]
     account = {
         "total_cost": total_cost, "total_value": total_value,
@@ -117,7 +128,8 @@ def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=Non
         "reported_nonbrand_roas": (nb_value / io.micros_to_money(nb_cost)) if nb_cost else None,
         "branded_share_of_nonbrand_value": (nb_branded_value / nb_value) if nb_value else None,
         "true_new_customer_cost": true_cost, "true_new_customer_value": true_value,
-        "true_new_customer_roas": (true_value / io.micros_to_money(true_cost)) if true_cost else None,
+        "true_new_customer_roas": true_roas,
+        "term_value_coverage": coverage, "term_value_coverage_floor": min_value_coverage,
         "reverse_leak_cost": sum(p["nonbranded_cost"] for p in reverse),
         "reverse_leak_value": sum(p["nonbranded_value"] for p in reverse),
         "flag": bool(nb_value and (nb_branded_value / nb_value) > flag_share),
@@ -130,6 +142,10 @@ def compute(campaigns, terms, brand, keywords=None, flag_share=0.20, windows=Non
         if other_total:
             assumptions.append(f"{render.money(other_total)} of search campaign cost has no search term row (Google's privacy threshold hides low-volume terms). Leakage is a floor.")
     return {"per_campaign": per, "account": account, "assumptions": assumptions}
+
+def _under_floor(a):
+    cov = a.get("term_value_coverage")
+    return cov is not None and cov < a.get("term_value_coverage_floor", MIN_TERM_VALUE_COVERAGE)
 
 def render_md(result, currency=""):
     a = result["account"]
@@ -168,7 +184,10 @@ def render_md(result, currency=""):
                   {"m": "Blended ROAS (all campaigns)", "v": render.ratio(a["blended_roas"])},
                   {"m": "Reported non-brand ROAS (non-brand campaigns as reported)", "v": render.ratio(a["reported_nonbrand_roas"])},
                   {"m": "Branded share of reported non-brand revenue", "v": render.pct(a["branded_share_of_nonbrand_value"])},
-                  {"m": "True new-customer ROAS (branded terms stripped out of every campaign)", "v": render.ratio(a["true_new_customer_roas"])},
+                  {"m": "True new-customer ROAS (branded terms stripped out of every campaign)",
+                   "v": render.ratio(a["true_new_customer_roas"]) + (" (under the value coverage floor)" if _under_floor(a) else "")},
+                  {"m": "Search-term value coverage (term value over campaign value, true-ROAS campaigns)",
+                   "v": render.pct(a.get("term_value_coverage")) + f" (floor {render.pct(a.get('term_value_coverage_floor', MIN_TERM_VALUE_COVERAGE), 0)})"},
                   {"m": "Reverse leak (non-branded cost inside brand campaigns)", "v": render.money(a["reverse_leak_cost"], currency)},
               ], ["m", "v"], ["Measure", "Value"]),
               ""]
@@ -197,7 +216,7 @@ def cmd_leakage(args):
     (out / "leakage.json").write_text(json.dumps(result, indent=2))
     a = result["account"]
     print(f"leakage: blended {render.ratio(a['blended_roas'])}, reported non-brand {render.ratio(a['reported_nonbrand_roas'])}, "
-          f"true new-customer {render.ratio(a['true_new_customer_roas'])}, branded share {render.pct(a['branded_share_of_nonbrand_value'])}"
+          f"true new-customer {render.ratio(a['true_new_customer_roas'])} (value coverage {render.pct(a['term_value_coverage'])}), branded share {render.pct(a['branded_share_of_nonbrand_value'])}"
           f"{' FLAG' if a['flag'] else ''} -> {out / 'leakage.md'}")
     return 0
 

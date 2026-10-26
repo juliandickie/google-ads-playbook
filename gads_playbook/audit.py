@@ -25,6 +25,7 @@ DEVICE_MIN_CONV = 5.0
 QS_PASS = 7.0                    # G20 impression-weighted quality score
 TARGET_TOLERANCE = 0.2           # G37 tCPA within 20 percent of the 30-day CPA
 KEYWORD_WASTE_CLICKS = 100       # G-WS1
+HOMEPAGE_SHARE_MISTAKE = 0.10    # mistake 2: landing-page spend on the homepage at or above this share
 STANDARD_WINDOW_DAYS = 90
 CLICK_STRATEGIES = {"TARGET_SPEND", "MANUAL_CPC", "MAXIMIZE_CLICKS"}
 CONVERSION_STRATEGIES = {"MAXIMIZE_CONVERSIONS", "TARGET_CPA"}
@@ -59,6 +60,10 @@ def pct(x, nd=1):
 
 def roas(x):
     return f"{x:.2f}x" if x is not None else "n/a"
+
+def count(n, word, plural=None):
+    """"1 keyword", "2 keywords": the count and the noun that agrees with it."""
+    return f"{n} {word if n == 1 else (plural or word + 's')}"
 
 def geo_name(resource):
     try:
@@ -105,6 +110,11 @@ class Evidence:
         self.windows = self._json(self.run_dir / "windows.json", "gads windows")
         self.brand_serp, self.brand_serp_from = self._latest("brand-serp.md", "the brand SERP check (gads skill)")
         self.reconciliation, self.reconciliation_from = self._latest("reconciliation.md", "the reconciliation (gads-audit 1.1)")
+        fs = self.run_dir / "feedscore.json"  # optional and not a named gap: most accounts have no feed
+        self.feedscore = json.loads(fs.read_text()) if fs.exists() else None
+        if self.feedscore is not None:
+            self.used.append(self.rel(fs))
+        self.followup = self._followup()
         self.deep_dir, self.manifest, self.deep_files = None, None, {}
         candidates = [self.ws / "raw" / f"deep-{deep}"] if deep else sorted((self.ws / "raw").glob("deep-*")) if (self.ws / "raw").exists() else []
         candidates = [c for c in candidates if c.is_dir()]
@@ -148,6 +158,12 @@ class Evidence:
         self.missing.append((self.rel(p), producer))
         return None, None
 
+    def _followup(self):
+        """The newest readout filed in a later run (a readout reads the account against an earlier audit), as a path relative to the workspace, or None."""
+        runs = self.ws / "runs"
+        later = sorted(p for p in runs.glob("*/readout.md") if re.match(r"^\d{4}-\d{2}-\d{2}$", p.parent.name) and p.parent.name > self.run_date) if runs.exists() else []
+        return self.rel(later[-1]) if later else None
+
     def _text(self, p, producer):
         if p.exists():
             self.used.append(self.rel(p))
@@ -190,6 +206,7 @@ class Report:
         self.caveats = []                     # reviewer caveats [(label, text)]
         self.review_notes = []                # what the review merge could not place
         self.review = None
+        self.mistakes = []                    # the library's five mistakes [(name, verdict, note)]
 
     def add(self, section, label, text):
         self.sections[section].append((label, text))
@@ -256,10 +273,10 @@ def rule_overview(rep):
     rep.headline.update({"window": f"{ev.data.get('window_start', '?')} to {ev.data.get('window_end', '?')}", "cost": cost, "value": value,
                          "conversions": conv, "roas": (value / (cost / 1e6)) if cost else None, "enabled": len(enabled), "total": len(totals),
                          "currency": ev.currency})
-    rep.add("overview", "Shape of the account", f"{len(enabled)} enabled campaigns ({', '.join(channels) or 'channel unknown'}) of {len(totals)} with spend in the window; "
+    rep.add("overview", "Shape of the account", (f"{len(enabled)} enabled campaigns ({', '.join(channels) or 'channel unknown'}) of {len(totals)} with spend in the window; "
             f"{sum(1 for n, c in totals.items() if c['status'] == 'PAUSED')} paused. "
             + ("No Performance Max campaign. " if not any(c['channel'] == 'PERFORMANCE_MAX' for c in totals.values()) else "")
-            + ("No Shopping campaign. " if not any(c['channel'] == 'SHOPPING' for c in totals.values()) else ""))
+            + ("No Shopping campaign. " if not any(c['channel'] == 'SHOPPING' for c in totals.values()) else "")).rstrip())
     rep.add("overview", f"Window {rep.headline['window']}", f"cost {money(cost)}, {num(conv, 1)} conversions, value {num(value, 0)}, blended ROAS {roas(rep.headline['roas'])}. "
             f"The enabled campaigns carry {money(en_cost)} of that. Source: {ev.link('exports/campaigns.csv')}.")
     if totals:
@@ -278,9 +295,12 @@ def rule_overview(rep):
         for c in ev.windows.get("campaigns", []):
             verdicts[c["verdict"]].append(c["campaign"])
         rep.headline["verdicts"] = dict(verdicts)
-        rep.add("overview", "Last 30 days", f"cost {money(cur.get('cost'))}, {num(cur.get('conversions') or 0, 1)} conversions, ROAS {roas(cur.get('roas'))}"
-                + (f", {'down' if delta < 0 else 'up'} {abs(delta) * 100:.1f} percent on the prior 30 days ({roas(prior.get('roas'))})" if delta is not None else "")
-                + f". Against the {ev.windows.get('target_roas')}x target: " + ", ".join(f"{len(v)} {k}" for k, v in verdicts.items())
+        if cur:
+            reading = (f"cost {money(cur.get('cost'))}, {num(cur.get('conversions') or 0, 1)} conversions, ROAS {roas(cur.get('roas'))}"
+                       + (f", {'down' if delta < 0 else 'up'} {abs(delta) * 100:.1f} percent on the prior 30 days ({roas(prior.get('roas'))})" if delta is not None else ""))
+        else:  # windows.json drops a window it lacks the history for (the 30-day read needs 60 days)
+            reading = "not available, windows.md lists the 30-day window as unavailable (it needs 60 days of history and this pull holds fewer)"
+        rep.add("overview", "Last 30 days", reading + f". Against the {ev.windows.get('target_roas')}x target: " + ", ".join(f"{len(v)} {k}" for k, v in verdicts.items())
                 + f". Source: {ev.link(ev.calc('windows'))}, Account table.")
     else:
         rep.add("overview", "Last 30 days", "no windows.json for this run date; run gads windows.")
@@ -435,7 +455,7 @@ def rule_tracking(rep, totals):
         if eff_key in c:  # v26 and later: the unified, account-wide setting
             eff = c.get(eff_key) or "UNSPECIFIED"
             on = eff == "ON"
-            rep.control("G43", "partial" if on else "warning", "enhanced conversions on (effective setting); verification not visible through the API" if on else f"enhanced conversions effective setting {eff}")
+            rep.control("G43", "partial" if on else "warning", "enhanced conversions on by the effective setting; verification not visible through the API" if on else f"enhanced conversions effective setting {eff}")
             ec_text = f"enhanced conversions {'on' if on else eff.lower()} (effective setting)"
         else:  # deep passes before v26 carried the leads-only flag; kept so their audits regenerate unchanged
             ecl = c.get("customer.conversion_tracking_setting.enhanced_conversions_for_leads_enabled")
@@ -461,17 +481,23 @@ def rule_leakage(rep, totals):
         rep.control("G05", "no evidence", "no leakage run")
         return
     a = L["account"]
-    rep.headline.update({"blended": a.get("blended_roas"), "true_roas": a.get("true_new_customer_roas"), "branded_share": a.get("branded_share_of_nonbrand_value")})
+    cov, floor = a.get("term_value_coverage"), a.get("term_value_coverage_floor")
+    under = cov is not None and floor is not None and cov < floor
+    rep.headline.update({"blended": a.get("blended_roas"), "true_roas": a.get("true_new_customer_roas"), "branded_share": a.get("branded_share_of_nonbrand_value"),
+                         "value_coverage": cov, "coverage_under_floor": under})
     lk = ev.link(ev.calc('leakage'))
     rep.add(S, "Blended ROAS (all campaigns)", roas(a.get("blended_roas")))
     rep.add(S, "Reported non-brand ROAS", roas(a.get("reported_nonbrand_roas")))
     rep.add(S, "Branded share of reported non-brand revenue", pct(a.get("branded_share_of_nonbrand_value") or 0))
-    rep.add(S, "True new-customer ROAS (branded terms stripped out of every campaign)", roas(a.get("true_new_customer_roas")))
+    rep.add(S, "True new-customer ROAS (branded terms stripped out of every campaign)", roas(a.get("true_new_customer_roas")) + (" (under the value coverage floor)" if under else ""))
+    if "term_value_coverage" in a:  # leakage.json from before 0.2.3 has no coverage
+        rep.add(S, "Search-term value coverage", (f"{pct(cov)} of the tracked value in the campaigns the true ROAS covers sits on search-term rows" if cov is not None else "no tracked value in the campaigns the true ROAS covers")
+                + f"; under {pct(floor, 0)} the true ROAS reads n/a.")
     rep.add(S, "Reverse leak (non-branded cost inside brand campaigns)", f"{ev.currency} {money(a.get('reverse_leak_cost'))}")
     branded = [c for c in L["per_campaign"] if c.get("kind") != "brand" and (c.get("branded_cost") or 0) > 0]
     brand_camps = [c for c in L["per_campaign"] if c.get("kind") == "brand"]
     rep.add(S, "Reading", (f"{len(brand_camps)} brand campaign(s). " if brand_camps else "No brand campaign, so blended equals reported non-brand. ")
-            + (f"Branded searches reach {len(branded)} non-brand campaigns: " + "; ".join(f"{c['campaign']} {money(c['branded_cost'])} (value {num(c['branded_value'], 0)})" for c in branded) + ". " if branded else "No branded cost inside the non-brand campaigns. ")
+            + (f"Branded searches reach {count(len(branded), 'non-brand campaign')}: " + "; ".join(f"{c['campaign']} {money(c['branded_cost'])} (value {num(c['branded_value'], 0)})" for c in branded) + ". " if branded else "No branded cost inside the non-brand campaigns. ")
             + " ".join(L.get("assumptions", [])) + f" Source: {lk}.")
     serp_verdict = None
     if ev.brand_serp:
@@ -490,7 +516,7 @@ def rule_leakage(rep, totals):
                 Confidence="high" if serp_verdict == "no bid" else "medium",
                 Change=f"Add the brand tokens ({', '.join(ev.data.get('brand_tokens', []))}) and their common variants as phrase negatives in a shared list \"Brand - do not bid\" applied to every non-brand campaign"
                        + ("." if serp_verdict == "no bid" else "; where the SERP check says protect, route those searches to a brand campaign instead."),
-                Risk="the few conversions those searches produced arrive organically instead.", Impact=f"about {money(total_b)} per window back and cleaner non-brand data.", Rollback="detach the list.", Window="30 days, confirm via search terms.")
+                Risk="the few conversions those searches produced arrive organically instead.", Impact=f"about {(ev.currency + ' ') if ev.currency else ''}{money(total_b)} per window back and cleaner non-brand data.", Rollback="detach the list.", Window="30 days, confirm via search terms.")
     else:
         rep.control("G05", "pass" if brand_camps else "not applicable", "brand negatives hold" if brand_camps else "no brand campaign and no branded cost in non-brand campaigns")
     if a.get("reverse_leak_cost"):
@@ -575,7 +601,7 @@ def rule_misallocation(rep, totals):
             k = (r["campaign.name"], r["ad_group_criterion.keyword.text"], r["ad_group_criterion.keyword.match_type"])
             agg[k]["clicks"] += io.parse_number(r.get("metrics.clicks")); agg[k]["conv"] += conv(r); agg[k]["cost"] += cost(r)
         waste = [(k, v) for k, v in agg.items() if v["clicks"] >= KEYWORD_WASTE_CLICKS and v["conv"] == 0]
-        rep.control("G-WS1", "warning" if waste else "pass", f"{len(waste)} keywords over {KEYWORD_WASTE_CLICKS} clicks with no conversion")
+        rep.control("G-WS1", "warning" if waste else "pass", f"{count(len(waste), 'keyword')} over {KEYWORD_WASTE_CLICKS} clicks with no conversion")
         if waste:
             rep.add(S, "06 G-WS1", "; ".join(f"\"{k[1]}\" {k[2].lower()} in {k[0]} ({v['clicks']:.0f} clicks, {num(v['cost'])})" for k, v in waste[:5]) + f". Source: {ev.link('exports/keywords.csv')}.")
         broad = sum(1 for r in kws if r.get("ad_group_criterion.keyword.match_type") == "BROAD" and r.get("ad_group_criterion.status") == "ENABLED")
@@ -695,8 +721,8 @@ def _rule_structure(rep, totals, enabled, st, crit, W):
                 lists[(r["shared_set.name"], r.get("shared_set.member_count", 0))].add(r["campaign.name"])
         rep.add(S, "Negative lists", "; ".join(f"\"{n}\" ({m}) on {len(c)} of {len(enabled)}" for (n, m), c in lists.items()) + (f". Source: {lk('shared_sets')}." if lists else f"none attached. Source: {lk('shared_sets')}."))
         partial = [(n, m, sorted(set(enabled) - c)) for (n, m), c in lists.items() if set(enabled) - c and m >= 20]
-        rep.control("G15", "warning" if partial else ("pass" if lists else "fail"), f"{len(partial)} large lists missing from some campaigns" if partial else ("lists on every campaign" if lists else "no negative lists"))
-        rep.control("G14", "warning" if len(lists) < 3 else "pass", f"{len(lists)} negative lists (the checklist expects themed Competitor, Free and Generic lists)")
+        rep.control("G15", "warning" if partial else ("pass" if lists else "fail"), f"{count(len(partial), 'large list')} missing from some campaigns" if partial else ("lists on every campaign" if lists else "no negative lists"))
+        rep.control("G14", "warning" if len(lists) < 3 else "pass", f"{count(len(lists), 'negative list')}; the checklist expects themed Competitor, Free and Generic lists")
         for n, m, missing in partial:
             rep.rec(S, f"\"{n}\" on every campaign", Campaign=", ".join(missing), Issue=f"the {m}-term list \"{n}\" is missing from {len(missing)} of {len(enabled)} enabled campaigns.",
                     Evidence=lk("shared_sets"), Rule="06 G15", Confidence="high", Change=f"Attach \"{n}\" to {', '.join(missing)} after checking it holds nothing those campaigns want.",
@@ -751,7 +777,7 @@ def _rule_structure(rep, totals, enabled, st, crit, W):
         pairs = [(a, b, loc[a] & loc[b]) for i, a in enumerate(enabled) for b in enabled[i + 1:] if loc.get(a) and loc.get(b) and loc[a] & loc[b] and _same_product(a, b)]
         if pairs:
             rep.add(S, "Overlapping targets", "; ".join(f"{a} and {b} both target {', '.join(sorted(x))}" for a, b, x in pairs) + f". Source: {lk('campaign_criteria')}.")
-            rep.control("G08", "fail", f"{len(pairs)} campaign pairs compete in the same auctions")
+            rep.control("G08", "fail", f"{count(len(pairs), 'campaign pair')} {'competes' if len(pairs) == 1 else 'compete'} in the same auctions")
             for a, b, x in pairs:
                 rep.rec(S, f"One auction per market for {a} and {b}", Campaign=f"{a}, {b}", Issue=f"both target {', '.join(sorted(x))} for the same product, so they bid against each other.",
                         Evidence=f"{lk('campaign_criteria')}, {lk('geo_90d')}", Rule="06 G01, G04, G08", Confidence="high",
@@ -768,7 +794,7 @@ def _rule_structure(rep, totals, enabled, st, crit, W):
         low = [r for r in scored if io.parse_number(r.get("ad_group_criterion.quality_info.quality_score")) <= 3]
         rep.add(S, "Keywords", (f"{len(kq)} enabled keywords with impressions in 30 days, {len(scored)} scored, impression-weighted Quality Score {wqs:.1f}" if wqs is not None else f"{len(kq)} keywords, none scored") + (f"; {len(low)} at 3 or below" if low else "") + f". Source: {lk('keyword_quality_30d')}.")
         rep.control("G20", ("pass" if wqs >= QS_PASS else "warning") if wqs is not None else "no evidence", f"weighted QS {wqs:.1f}" if wqs is not None else "no scores")
-        rep.control("G21", "warning" if low else "pass", f"{len(low)} keywords at 3 or below")
+        rep.control("G21", "warning" if low else "pass", f"{count(len(low), 'keyword')} at 3 or below")
         rep.control("G-KW1", "warning" if len(scored) < len(kq) * 0.7 else "pass", f"{len(kq) - len(scored)} of {len(kq)} keywords unscored")
     else:
         for cid in ("G20", "G21", "G-KW1"):
@@ -788,7 +814,7 @@ def _rule_structure(rep, totals, enabled, st, crit, W):
     if ce is not None:
         cw = (ev.manifest or {}).get("windows", {}).get("changes", ["?", "?"])
         rep.add(S, f"Change history, {cw[0]} to {cw[1]}", (f"{len(ce)} change event{'s' if len(ce) != 1 else ''}; the last by {ce[0].get('change_event.user_email', '?')} on {str(ce[0].get('change_event.change_date_time', ''))[:10]} ({ce[0].get('change_event.change_resource_type', '')})." if ce else "no change events. Nobody has touched the account in four weeks.") + f" Source: {lk('change_events_28d')}.")
-        rep.control("G13", "fail" if not ce else "pass", f"{len(ce)} changes in 28 days")
+        rep.control("G13", "fail" if not ce else "pass", f"{count(len(ce), 'change')} in 28 days")
         rep.control("G-AD1", "fail" if not any(r.get("change_event.change_resource_type") in ("AD", "AD_GROUP_AD", "ASSET") for r in ce) else "pass", "ad changes in 28 days" if ce else "no changes")
     else:
         rep.control("G13", "no evidence", "change events need the deep pass"); rep.control("G-AD1", "no evidence", "change events need the deep pass")
@@ -800,7 +826,7 @@ def _rule_structure(rep, totals, enabled, st, crit, W):
             cpa30 = ((w.get("windows") or {}).get("30") or {}).get("cur", {}).get("cpa")
             if tcpa and cpa30:
                 gap = abs(cpa30 - tcpa) / tcpa
-                rep.control("G37", "pass" if gap <= TARGET_TOLERANCE else "warning", f"{n} tCPA {money(tcpa)} against a 30-day CPA of {money(cpa30)}" + ("" if gap <= TARGET_TOLERANCE else f" ({pct(gap, 0)} apart)"))
+                rep.control("G37", "pass" if gap <= TARGET_TOLERANCE else "warning", f"{n} tCPA {money(tcpa)} against a 30-day CPA of {money(cpa30)}" + ("" if gap <= TARGET_TOLERANCE else f", {pct(gap, 0)} apart"))
                 break
     budget_limited = [n for n in enabled if W.get(n, {}).get("budget_limited")]
     rep.control("G39", "warning" if budget_limited else "pass", f"budget-limited: {', '.join(budget_limited)}" if budget_limited else "no campaign budget-limited in the last 7 days")
@@ -948,6 +974,7 @@ def build(ev):
     rule_misallocation(rep, totals)
     rule_feed(rep, totals)
     rule_roles(rep, totals)
+    rep.mistakes = five_mistakes(rep, totals)
     order = ["tracking", "leakage", "pmax", "misallocation", "feed", "roles"]
     rep.recs.sort(key=lambda r: order.index(r["section"]))
     rep.review = load_review(ev.run_dir)
@@ -979,6 +1006,77 @@ def three_changes(rep):
             picks.append(r); seen.add(r["number"])
     return picks[:3]
 
+def _serp_verdicts(text):
+    """The verdict cells (last column) of the brand-serp.md table, lowercased; header and separator rows skipped."""
+    out = []
+    for line in (text or "").splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")] if line.strip().startswith("|") else []
+        if cells and cells[-1] and not set(cells[-1]) <= set("-: ") and cells[-1].lower() != "verdict":
+            out.append(cells[-1].lower())
+    return out
+
+def five_mistakes(rep, totals):
+    """The library's five mistakes as (name, verdict, note), each answered from a file: yes, no, not needed today,
+    not applicable, check, or no evidence."""
+    ev, out = rep.ev, []
+    per = (ev.leakage or {}).get("per_campaign", [])
+    brand = [p for p in per if p.get("kind") == "brand"]
+    rows = _serp_verdicts(ev.brand_serp)
+    if brand:
+        out.append(("No branded campaign", "no", f"{len(brand)} brand campaign{'s' if len(brand) != 1 else ''}"))
+    elif rows:
+        protect = sum(1 for v in rows if v.startswith("protect"))
+        checked = f"{len(rows)} phrase{'s' if len(rows) != 1 else ''} checked on {ev.brand_serp_from}"
+        out.append(("No branded campaign", "yes" if protect else "not needed today",
+                    f"{protect} of the {checked} {'has' if protect == 1 else 'have'} a protect verdict and no brand campaign covers {'it' if protect == 1 else 'them'}" if protect
+                    else f"no protect verdict among the {checked}, so the brand ranks first with no competitor ad"))
+    else:
+        out.append(("No branded campaign", "no evidence", "brand-serp.md has no verdict table" if ev.brand_serp else "no brand SERP check; run it from the gads skill"))
+    if ev.deep("landing_pages_90d") is None:
+        out.append(("Sending traffic to the homepage", "no evidence", "landing pages need the deep pass"))
+    else:
+        share = rep.headline.get("homepage_share") or 0.0  # an empty file means no landing-page spend at all
+        out.append(("Sending traffic to the homepage", "yes" if share >= HOMEPAGE_SHARE_MISTAKE else "no", f"{pct(share)} of 90-day landing-page spend lands on the homepage"))
+    pmax = [n for n, c in (totals or {}).items() if c["channel"] == "PERFORMANCE_MAX"]
+    kinds = {p["campaign"]: p.get("kind") for p in per}
+    if not pmax:
+        out.append(("Letting PMax run wild", "no" if totals else "no evidence", "no Performance Max campaign" if totals else "no campaigns.csv"))
+    elif not per:
+        out.append(("Letting PMax run wild", "no evidence", f"{len(pmax)} PMax campaigns; run gads leakage to classify them"))
+    elif any(kinds.get(n) == "pmax-scaling" for n in pmax):
+        out.append(("Letting PMax run wild", "no", "a brand-excluded scaling campaign by name; confirm the exclusion in the UI"))
+    elif any(kinds.get(n) == "pmax-capture" for n in pmax):
+        out.append(("Letting PMax run wild", "yes", "brand-allowed capture only, with no brand-excluded scaling campaign"))
+    else:
+        out.append(("Letting PMax run wild", "no evidence", f"{len(pmax)} PMax campaigns not tagged Capture or Scaling by name, and brand exclusions are not visible through the exports"))
+    ce = ev.deep("change_events_28d")
+    if ce is None:
+        out.append(("Scaling before you have data", "no evidence", "change events need the deep pass"))
+    else:
+        budget = [r for r in ce if r.get("change_event.change_resource_type") == "CAMPAIGN_BUDGET"]
+        cleared = [c["campaign"] for c in (ev.windows or {}).get("campaigns", []) if c.get("verdict") == "scale"]
+        if not budget:
+            out.append(("Scaling before you have data", "no", "no budget changes in the 28-day change window"))
+        elif ev.windows is None:
+            out.append(("Scaling before you have data", "no evidence", f"{len(budget)} budget changes in 28 days; run gads windows to read them against the gate"))
+        elif not cleared:
+            out.append(("Scaling before you have data", "yes", f"{len(budget)} budget changes in 28 days while no campaign clears the 7, 14 and 30-day gate"))
+        else:
+            out.append(("Scaling before you have data", "check", f"{len(budget)} budget changes in 28 days; the gate clears {', '.join(cleared)}, so match each change to those in change_events_28d.json"))
+    products = ev.export("products") or []
+    shopping = any(c["channel"] in ("SHOPPING", "PERFORMANCE_MAX") for c in (totals or {}).values())
+    feed = (ev.ws / "feed.tsv").exists() or (ev.ws / "feed.csv").exists()
+    if not shopping and not products:
+        out.append(("Ignoring your product feed", "not applicable", "no Shopping or Performance Max campaign and no product rows"))
+    elif not feed:
+        out.append(("Ignoring your product feed", "yes", f"{len(products)} product rows in the window and no feed file in the workspace to score"))
+    elif ev.feedscore is None:
+        out.append(("Ignoring your product feed", "no evidence", "a feed file is present; run gads feedscore for this run date"))
+    else:
+        rebuild = len(ev.feedscore.get("rebuild", []))
+        out.append(("Ignoring your product feed", "yes" if rebuild else "no", f"{rebuild} of {ev.feedscore.get('scored', '?')} products score under 7 in feedscore.md"))
+    return out
+
 def render_audit(rep):
     ev = rep.ev
     L = []
@@ -997,6 +1095,8 @@ def render_audit(rep):
         L += [f"**Deep pass windows:** " + "; ".join(f"{k} {v[0]} to {v[1]}" for k, v in (ev.manifest or {}).get("windows", {}).items()) + ".", ""]
         if (ev.manifest or {}).get("api_version"):
             L += [f"**Google Ads API:** {ev.manifest['api_version']}" + (f", client google-ads {ev.manifest['client_version']}" if ev.manifest.get("client_version") else "") + ".", ""]
+    if ev.followup:
+        L += [f"**Follow-up:** the readout of {Path(ev.followup).parent.name}, {ev.link(ev.followup)}.", ""]
     L += ["**Playbook references:** [02 architecture](https://github.com/juliandickie/google-ads-playbook/blob/main/references/02-google-ads-architecture.md), [06 audit checklist](https://github.com/juliandickie/google-ads-playbook/blob/main/references/06-google-audit-checklist.md), [07 conversion tracking](https://github.com/juliandickie/google-ads-playbook/blob/main/references/07-conversion-tracking-execution.md).", ""]
     if ev.missing:
         L += ["## Missing evidence", "", "Sources this run did not have and what would produce them. Every control they would have decided reads \"no evidence\" below.", ""]
@@ -1025,6 +1125,10 @@ def render_audit(rep):
                     L += [f"**{f}:** {r[f]}", ""]
             if r.get("reviewed"):
                 L += [f"**Reviewed:** {'added by the reviewer' if r['reviewed'] == 'added' else 'edited by the reviewer'} in {REVIEW_FILE}.", ""]
+    L += ["## The five mistakes these prompts keep finding", "",
+          "The five structural errors the playbook library names, each answered from a file in this workspace.", ""]
+    for i, (mname, verdict, note) in enumerate(rep.mistakes, 1):
+        L += [f"**{i}. {mname}:** {verdict} ({note}).", ""]
     L += ["## The three changes that move new-customer ROAS most, in order", ""]
     for i, r in enumerate(three_changes(rep), 1):
         L += [f"**{('First', 'Second', 'Third')[i - 1]}, recommendation {r['number']} ({r['title']}):** {r['Change']}", ""]
@@ -1068,7 +1172,11 @@ def render_executive(rep):
     if h.get("primary_90d"):
         L += [f"**What the bidding is chasing:** of the {num(h['primary_90d'], 0)} conversions the account optimises toward in the last 90 days, {num(h['non_purchase_primary_90d'], 0)} are not purchases. Until that changes, the return figures above describe an algorithm buying the cheapest signal it can count, not sales.", ""]
     if h.get("true_roas") is not None:
-        L += [f"**New-customer return:** {roas(h['true_roas'])} once branded searches are stripped out, against a blended {roas(h.get('blended'))}. Brand searches make up {pct(h.get('branded_share') or 0)} of the non-brand revenue.", ""]
+        L += [f"**New-customer return:** {roas(h['true_roas'])} once branded searches are stripped out, against a blended {roas(h.get('blended'))}"
+              + (f", read on the {pct(h['value_coverage'], 0)} of tracked value that search terms show" if h.get("value_coverage") is not None else "")
+              + f". Brand searches make up {pct(h.get('branded_share') or 0)} of the non-brand revenue.", ""]
+    elif h.get("coverage_under_floor"):
+        L += [f"**New-customer return:** not measurable from this window, because search terms show only {pct(h['value_coverage'])} of the tracked value. The blended return is {roas(h.get('blended'))}.", ""]
     L += ["## The three changes that matter most", ""]
     for i, r in enumerate(three_changes(rep), 1):
         first = re.split(r"[.;] ", r["Change"])[0].rstrip(".;") + "."
@@ -1097,6 +1205,7 @@ def to_json(rep):
             "sections": {k: [{"label": l, "text": t} for l, t in v] for k, v in rep.sections.items()},
             "campaigns": [{"campaign": n, "lines": [{"label": l, "text": t} for l, t in ls]} for n, ls in rep.campaigns],
             "recommendations": rep.recs, "controls": {k: {"verdict": v, "note": n} for k, (v, n) in rep.controls.items()},
+            "mistakes": [{"mistake": m, "verdict": v, "note": n} for m, v, n in rep.mistakes], "followup": rep.ev.followup,
             "review": {"file": rep.ev.rel(rep.review["path"]) if rep.review else None, "notes": rep.review_notes, "caveats": [{"label": l, "text": t} for l, t in rep.caveats]}}
 
 def run(ws, run_date=None, deep=None, executive=False):

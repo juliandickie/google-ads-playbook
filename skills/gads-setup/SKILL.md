@@ -17,7 +17,7 @@ Run:
 ${CLAUDE_PLUGIN_ROOT}/bin/gads auth --client-json <path> --login-customer-id <mcc id>
 ```
 
-It opens a browser consent, then writes `~/.config/google-ads-playbook/adc.json` and `google-ads.yaml` (mode 600). adc.json also records the OAuth client's GCP project as its quota project (override with `--gcp-project`); use the same project id for the plugin's `gcp_project_id` value. Tell the operator to set the plugin's `adc_path`, `gcp_project_id`, and `login_customer_id` in the plugin config so the bundled MCP can start; an MCP call that fails with `${user_config.adc_path}` in the message means those values are not set.
+It opens a browser consent, then writes `~/.config/google-ads-playbook/adc.json` and `google-ads.yaml` (mode 600). adc.json also records the OAuth client's GCP project as its quota project (override with `--gcp-project`); use the same project id for the plugin's `gcp_project_id` value. Tell the operator to set the plugin's `adc_path`, `gcp_project_id`, and `login_customer_id` in the plugin config so the bundled MCP can start. An MCP call that fails with `${user_config.adc_path}` in the message means the server did not get those values. Either they are not set (`claude plugin configure google-ads-playbook@<marketplace>` says which), or another `google-ads` server with the same command is shadowing the plugin's: a project `.mcp.json` in the session's folder or a folder above it, such as the root of a google-ads-playbook checkout at 0.2.2 or earlier. `claude mcp get google-ads` shows that server's scope; open the session elsewhere or remove the duplicate.
 
 Check: `${CLAUDE_PLUGIN_ROOT}/bin/gads accounts --login-customer <mcc id>` lists the client accounts. If the API answers CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION (or an authorization error on a production account), the Cloud project has only Test access: stop and send the operator to the Google Ads API Overview page in Cloud Console to apply for Explorer access; nothing downstream will work.
 
@@ -25,7 +25,7 @@ Check: `${CLAUDE_PLUGIN_ROOT}/bin/gads accounts --login-customer <mcc id>` lists
 
 Preferred: `${CLAUDE_PLUGIN_ROOT}/bin/gads pull --customer <id> --login-customer <mcc id> --workspace ~/gads/<id>` (180 days for campaigns and search terms alike; `--days` and `--search-terms-days` change them).
 
-Fallback when the API is unavailable: the operator exports from the Google Ads UI (Campaigns with the Day column, Search terms, Search keywords, Products, Conversions) and runs `${CLAUDE_PLUGIN_ROOT}/bin/gads normalise <files or folder> --workspace ~/gads/<id>`. Merchant Center or Shopify feed export goes to `<ws>/feed.tsv` as supplied.
+Fallback when the API is unavailable: the operator exports from the Google Ads UI (Campaigns with the Day column, Search terms, Search keywords, Products, Conversions) and runs `${CLAUDE_PLUGIN_ROOT}/bin/gads normalise <files or folder> --workspace ~/gads/<id>`. It writes the canonical exports and a minimal `gads.json` (the campaign window from the export's dates, source ui). UI exports do not carry the account itself, so add `customer_id`, `customer_name`, `currency` and `timezone` to gads.json with a small edit; Gate 3 adds the brand keys. Merchant Center or Shopify feed export goes to `<ws>/feed.tsv` as supplied.
 
 Check: `gads validate` shows every file with rows and lists the calculators that can run.
 
